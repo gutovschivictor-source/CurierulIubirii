@@ -43,7 +43,7 @@
   #present .sp { position: absolute; top: 30%; left: 50%; font-size: 20px; opacity: 0; }
   #present.open .sp { animation: rise 1.4s ease-out forwards; }
   @keyframes rise { 0% { opacity: 0; transform: translate(0, 0); } 20% { opacity: 1; } 100% { opacity: 0; transform: translate(var(--dx), -90px); } }
-  #msg { position: fixed; left: 0; right: 0; top: calc(42% + 100px); z-index: 7; padding: 0 20px; text-align: left; color: #fff; font: 600 17px/1.4 -apple-system, 'SF Pro Display', system-ui, 'Segoe UI', sans-serif; letter-spacing: -.01em; opacity: 0; }
+  #msg { position: fixed; left: 0; right: 0; top: calc(42% + 100px); z-index: 9; padding: 0 20px; text-align: left; color: #fff; font: 600 17px/1.4 -apple-system, 'SF Pro Display', system-ui, 'Segoe UI', sans-serif; letter-spacing: -.01em; opacity: 0; }
   #msg.on { opacity: 1; }
   #msg span { display: inline-block; opacity: 0; }
   #msg.on span { animation: ios 1.1s cubic-bezier(.2,.8,.2,1) forwards, glow 2.4s ease-out forwards; animation-delay: calc(var(--i) * 260ms), calc(var(--i) * 260ms); }
@@ -101,35 +101,36 @@
   const SFX = (() => {
     let ac, mg, nb, eng = null, lastBump = 0, foot = false;
     const init = () => {
-      if (!ac) {
-        const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
-        ac = new AC(); mg = ac.createGain(); mg.gain.value = .6; mg.connect(ac.destination);
-        nb = ac.createBuffer(1, ac.sampleRate * 2, ac.sampleRate);
-        const d = nb.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
-        music.start();
-      }
-      if (ac.state === 'suspended') ac.resume();
-    };
+  if (!ac) {
+    const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
+    ac = new AC(); mg = ac.createGain(); mg.gain.value = .6; mg.connect(ac.destination);
+    nb = ac.createBuffer(1, ac.sampleRate * 2, ac.sampleRate);
+    const d = nb.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    ac.onstatechange = () => { if (ac.state === 'running') music.start(); };
+  }
+  if (ac.state === 'suspended') ac.resume().then(() => { if (ac.state === 'running') music.start(); }).catch(() => {});
+  else if (ac.state === 'running') music.start();
+};
     const env = (g, t0, d, v, a, rise) => {
       g.gain.setValueAtTime(.0001, t0);
       if (rise) { g.gain.exponentialRampToValueAtTime(v, t0 + d * .95); g.gain.linearRampToValueAtTime(.0001, t0 + d); }
       else { g.gain.linearRampToValueAtTime(v, t0 + a); g.gain.exponentialRampToValueAtTime(.0001, t0 + d); }
     };
-    const tone = (f, d, o = {}) => {
-      if (!ac) return;
-      const { type = 'sine', v = .25, at = 0, to = f, a = .008, rise = false, dest = null } = o, t0 = ac.currentTime + at;
-      const os = ac.createOscillator(), g = ac.createGain();
-      os.type = type; os.frequency.setValueAtTime(f, t0); os.frequency.exponentialRampToValueAtTime(Math.max(1, to), t0 + d);
-      env(g, t0, d, v, a, rise); os.connect(g); g.connect(dest || mg); os.start(t0); os.stop(t0 + d + .05);
-    };
-    const noise = (d, o = {}) => {
-      if (!ac) return;
-      const { v = .25, at = 0, f = 1000, to = f, q = 1, type = 'bandpass', a = .01, rise = false, dest = null } = o, t0 = ac.currentTime + at;
-      const s = ac.createBufferSource(), fl = ac.createBiquadFilter(), g = ac.createGain();
-      s.buffer = nb; s.loop = true; fl.type = type; fl.Q.value = q;
-      fl.frequency.setValueAtTime(f, t0); fl.frequency.exponentialRampToValueAtTime(Math.max(20, to), t0 + d);
-      env(g, t0, d, v, a, rise); s.connect(fl); fl.connect(g); g.connect(dest || mg); s.start(t0); s.stop(t0 + d + .05);
-    };
+const tone = (f, d, o = {}) => {
+  if (!ac) return;
+  const { type = 'sine', v = .25, at = 0, to = f, a = .008, rise = false, dest = null } = o, t0 = ac.currentTime + at;
+  const os = ac.createOscillator(), g = ac.createGain();
+  os.type = type; os.frequency.setValueAtTime(f, t0); os.frequency.exponentialRampToValueAtTime(Math.max(1, to), t0 + d);
+  env(g, t0, d, v, a, rise); os.connect(g); g.connect(dest || mg); os.start(t0); os.stop(t0 + d + .05);
+};
+const noise = (d, o = {}) => {
+  if (!ac) return;
+  const { v = .25, at = 0, f = 1000, to = f, q = 1, type = 'bandpass', a = .01, rise = false, dest = null } = o, t0 = ac.currentTime + at;
+  const s = ac.createBufferSource(), fl = ac.createBiquadFilter(), g = ac.createGain();
+  s.buffer = nb; s.loop = true; fl.type = type; fl.Q.value = q;
+  fl.frequency.setValueAtTime(f, t0); fl.frequency.exponentialRampToValueAtTime(Math.max(20, to), t0 + d);
+  env(g, t0, d, v, a, rise); s.connect(fl); fl.connect(g); g.connect(dest || mg); s.start(t0); s.stop(t0 + d + .05);
+};
     // ---- melodie de fundal: aventura usoara, in bucla (8 masuri, La minor) ----
     const music = (() => {
       let mus = null, timer = null, step = 0, next = 0, lvl = .6;
@@ -253,7 +254,13 @@
     await wait(show(msg.split(' ').join('|'), gap, D.querySelector('.tx')));
     D.querySelector('.bt').classList.add('on');
     let sz = 1; const no = D.querySelector('#no');
-    no.onclick = () => { SFX.no(); sz *= .7; no.style.transform = `scale(${sz})`; };
+    let nx = 0, ny = 0;
+no.onclick = () => {
+  SFX.no(); sz *= .7;
+  const a = Math.random() * Math.PI * 2;
+  nx += Math.cos(a) * 10; ny += Math.sin(a) * 10;
+  no.style.transform = `translate(${nx}px,${ny}px) scale(${sz})`;
+};
     await new Promise(res => { D.querySelector('#yes').onclick = () => { SFX.yes(); res(); }; });
     D.style.pointerEvents = 'none'; D.classList.remove('in'); await wait(700); D.remove();
   }
@@ -431,8 +438,9 @@
   }
   // dialog: Bob Blup cere ajutorul; Da -> apare plicul si pornesc trimiterea, Nu -> doar butonul Nu se micsoreaza
   (async () => {
-    await wait(1200);
-    const D = document.createElement('div'); D.id = 'dlg';
+  await wait(1200);
+  SFX.init();            // <-- pornește muzica odată cu dialogul
+  const D = document.createElement('div'); D.id = 'dlg';
     D.innerHTML = '<div class="nm">Bob Blup</div><div class="tx"></div><div class="bt"><div class="slot"><button id="yes">Da</button></div><div class="slot"><button id="no">Nu-mi pasă!</button>' + ARROW + '</div></div>';
     document.body.appendChild(D);
     D.getBoundingClientRect(); D.classList.add('in');
@@ -441,7 +449,13 @@
     await wait(show('— Salut, vreau sa ma ajuți urgent cu un colet, dorești sa impachetezi un colet pentru o persoană importantă ?👏🫶'.split(' ').join('|'), 140, tx));
     D.querySelector('.bt').classList.add('on');
     let sz = 1; const no = D.querySelector('#no');
-    no.onclick = () => { SFX.no(); sz *= .7; no.style.transform = `scale(${sz})`; };
+    let nx = 0, ny = 0;
+no.onclick = () => {
+  SFX.no(); sz *= .7;
+  const a = Math.random() * Math.PI * 2;
+  nx += Math.cos(a) * 10; ny += Math.sin(a) * 10;
+  no.style.transform = `translate(${nx}px,${ny}px) scale(${sz})`;
+};
     D.querySelector('#yes').onclick = async () => {
       SFX.yes(); D.style.pointerEvents = 'none';
       D.classList.remove('in'); await wait(700); D.remove();
@@ -845,11 +859,79 @@
     document.body.append(G, m);
     G.getBoundingClientRect(); G.classList.add('in');
     SFX.whoosh(1.1, true); setTimeout(() => SFX.pop(), 1200); await wait(1900);
-    G.classList.add('open'); SFX.pop(); SFX.sparkle(); await wait(700); m.classList.add('on');
+    G.classList.add('open'); SFX.pop(); SFX.sparkle(); stain(G); await wait(700); m.classList.add('on');
     m.querySelectorAll('span').forEach((_, i) => setTimeout(() => SFX.chime(i), i * 260));
     setTimeout(() => SFX.hbd(), 1700);
   }
+// 7 benzi verticale peste capacul cutiei (pornesc din gura corpului); dupa 2s rosul coboara foarte rapid peste tot
+function stain(G) {
+  const W = innerWidth, H = innerHeight, dpr = Math.min(devicePixelRatio || 1, 2);
+  const mk = z => {
+    const cv = document.createElement('canvas');
+    cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+    cv.style.cssText = `position:fixed;inset:0;width:100%;height:100%;z-index:${z};pointer-events:none`;
+    document.body.appendChild(cv);
+    return cv.getContext('2d');
+  };
+  const cb = mk(8);   // benzi: peste cutie si capac (cutia are z-index 7)
+  const cr = mk(8);   // rosu: creat al doilea, deci e peste benzi (si peste cutie)
 
+  const r0 = G.getBoundingClientRect();
+  const bodyL = r0.left + r0.width * .06, bodyW = r0.width * .88;   // corpul cutiei
+  const oy = r0.top + r0.height * .30;                              // marginea de sus a corpului (24/80)
+  const LW = bodyW / 7;
+
+  const RB = ['#ff1744', '#ff7a00', '#ffd000', '#2bd96b', '#1e90ff', '#5b3df5', '#b33dff'];
+  const RED = '#e8112d';
+  const bands = RB.map((col, i) => ({ col, x: bodyL + i * LW, h: 0 }));
+  const SPEED = 2600;
+
+  const cw = Math.max(26, W / 14);
+  const drips = [];
+  for (let x = -cw; x < W + cw * 2; x += cw * .8) {
+    drips.push({
+      x, w: cw * (1.7 + Math.random() * .5),
+      delay: 2 + Math.random() * .1,
+      v: 1400 + Math.random() * 500, a: 7000 + Math.random() * 2500,
+      ph: Math.random() * 6.28, bulb: 1.08 + Math.random() * .2, y: -30
+    });
+  }
+
+  const born = performance.now(); let last = born;
+  const tick = now => {
+    const dt = Math.min(.05, (now - last) / 1000); last = now;
+    const age = (now - born) / 1000;
+
+    // benzile cresc in sus, peste capac
+    cb.setTransform(dpr, 0, 0, dpr, 0, 0);
+    cb.clearRect(0, 0, W, H);
+    for (const b of bands) {
+      b.h += SPEED * dt;
+      cb.fillStyle = b.col;
+      cb.fillRect(b.x - .5, oy - b.h, LW + 1, b.h);
+    }
+
+    // rosul
+    cr.setTransform(dpr, 0, 0, dpr, 0, 0);
+    cr.clearRect(0, 0, W, H);
+    let allDone = true;
+    cr.fillStyle = RED; cr.strokeStyle = RED;
+    for (const d of drips) {
+      const t = Math.max(0, age - d.delay);
+      if (t > 0) d.y = -30 + d.v * t + .5 * d.a * t * t;
+      if (d.y < H + d.w) allDone = false;
+      if (t <= 0) continue;
+      const sway = Math.sin(age * 2 + d.ph) * 3;
+      cr.lineWidth = d.w; cr.lineCap = 'butt';
+      cr.beginPath(); cr.moveTo(d.x + sway, -40); cr.lineTo(d.x + sway, d.y); cr.stroke();
+      cr.beginPath(); cr.arc(d.x + sway, d.y, d.w / 2 * d.bulb, 0, 7); cr.fill();
+    }
+
+    if (!allDone) requestAnimationFrame(tick);
+    else { cr.fillStyle = RED; cr.fillRect(0, 0, W, H); }
+  };
+  requestAnimationFrame(tick);
+}
 </script>
 </body>
 </html>
