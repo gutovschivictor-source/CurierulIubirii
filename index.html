@@ -222,7 +222,7 @@ const noise = (d, o = {}) => {
       return {
         start() {
           if (timer || !ac) return;
-          mus = ac.createGain(); mus.gain.setValueAtTime(.0001, ac.currentTime); mus.gain.linearRampToValueAtTime(lvl, ac.currentTime + 2.5); mus.connect(mg);
+          mus = ac.createGain(); mus.gain.setValueAtTime(.0001, ac.currentTime); mus.gain.linearRampToValueAtTime(lvl, ac.currentTime + .4); mus.connect(mg);
           next = ac.currentTime + .15; timer = setInterval(sched, 120);
         },
         mode(m) {
@@ -281,7 +281,7 @@ const noise = (d, o = {}) => {
   // dialog Bob Blup reutilizabil: se rezolva cand apesi Da; Nu micsoreaza butonul
   async function bobAsk(msg, gap) {
     const D = document.createElement('div'); D.id = 'dlg'; D.style.zIndex = 9;
-    D.innerHTML = '<div class="nm">Bob Blup</div><div class="tx"></div><div class="bt"><div class="slot"><button id="yes">Da</button></div><div class="slot"><button id="no">Nu și de data asta!</button>' + ARROW + '</div></div>';
+    D.innerHTML = '<div class="nm">Bob Blup</div><div class="tx"></div><div class="bt"><div class="slot"><button id="yes">Da, cum sa nu.</button></div><div class="slot"><button id="no">Nu și de data asta!</button>' + ARROW + '</div></div>';
     document.body.appendChild(D);
     D.getBoundingClientRect(); D.classList.add('in');
     await wait(500);
@@ -472,11 +472,17 @@ no.onclick = () => {
   }
   // dialog: Bob Blup cere ajutorul; Da -> apare plicul si pornesc trimiterea, Nu -> doar butonul Nu se micsoreaza
 (async () => {
-  if (+location.hash.slice(1)) return;   // TEMPORAR: nu porni dialogul când sari la un nivel
-  await wait(1200);
-  SFX.init();            // <-- pornește muzica odată cu dialogul
+  if (+location.hash.slice(1) && innerWidth > 700) return;
+  await new Promise(res => {
+    const go = document.createElement('div');
+    go.textContent = 'Atinge pentru a începe';
+    go.style.cssText = 'position:fixed;inset:0;z-index:99997;background:#fff;display:flex;align-items:center;justify-content:center;font:700 16px system-ui,sans-serif;color:#000';
+    go.onclick = () => { SFX.init(); go.remove(); res(); };
+    document.body.appendChild(go);
+  });
+  await wait(300);
   const D = document.createElement('div'); D.id = 'dlg';
-    D.innerHTML = '<div class="nm">Bob Blup</div><div class="tx"></div><div class="bt"><div class="slot"><button id="yes">Da</button></div><div class="slot"><button id="no">Nu-mi pasă!</button>' + ARROW + '</div></div>';
+    D.innerHTML = '<div class="nm">Bob Blup</div><div class="tx"></div><div class="bt"><div class="slot"><button id="yes">Da, de sigur</button></div><div class="slot"><button id="no">Nu-mi pasă!</button>' + ARROW + '</div></div>';
     document.body.appendChild(D);
     D.getBoundingClientRect(); D.classList.add('in');
     await wait(500);
@@ -1191,10 +1197,10 @@ function makeCard(item, W, dpr) {
   const lbl = document.createElement('span');
   lbl.textContent = `${cur + 1}/${NAMES.length} · ${NAMES[cur]}`;
   bar.append(mk('◀', cur - 1), lbl, mk('▶', cur + 1));
-  document.body.appendChild(bar);
+ if (innerWidth > 700) document.body.appendChild(bar);
 
   // dacă ai sărit la un nivel: ecran de start (ca să pornească și sunetul)
-  if (cur > 0) {
+  if (cur > 0 && innerWidth > 700) {
     const ov = document.createElement('div');
     ov.textContent = `Nivel: ${NAMES[cur]} — atinge pentru a porni`;
     ov.style.cssText = 'position:fixed;inset:0;z-index:99998;background:#fff;display:flex;align-items:center;justify-content:center;font:700 16px system-ui,sans-serif;color:#000';
@@ -1221,7 +1227,6 @@ async function openCam() {
     v.style.cssText = `position:absolute;border-radius:50%;object-fit:cover;transform:scaleX(-1);pointer-events:none;
       left:${r.left - pr.left + 50 * k}px;top:${r.top - pr.top + 100 * k}px;width:${d}px;height:${d}px`;
     host.appendChild(v);
-v.style.boxShadow = `inset 0 0 0 ${8 * k}px rgba(255,255,255,.55)`;
     v.play().catch(() => {});
 const ring = document.createElement('div');
 ring.className = 'ringTop';
