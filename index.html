@@ -95,21 +95,166 @@
 <script>
   const t = document.getElementById('txt');
   const wait = ms => new Promise(r => setTimeout(r, ms));
+
+  /* ===== SUNETE (sintetizate, fara fisiere) ===== */
+  const vib = p => { try { navigator.vibrate && navigator.vibrate(p); } catch (_) {} };
+  const SFX = (() => {
+    let ac, mg, nb, eng = null, lastBump = 0, foot = false;
+    const init = () => {
+      if (!ac) {
+        const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
+        ac = new AC(); mg = ac.createGain(); mg.gain.value = .6; mg.connect(ac.destination);
+        nb = ac.createBuffer(1, ac.sampleRate * 2, ac.sampleRate);
+        const d = nb.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+        music.start();
+      }
+      if (ac.state === 'suspended') ac.resume();
+    };
+    const env = (g, t0, d, v, a, rise) => {
+      g.gain.setValueAtTime(.0001, t0);
+      if (rise) { g.gain.exponentialRampToValueAtTime(v, t0 + d * .95); g.gain.linearRampToValueAtTime(.0001, t0 + d); }
+      else { g.gain.linearRampToValueAtTime(v, t0 + a); g.gain.exponentialRampToValueAtTime(.0001, t0 + d); }
+    };
+    const tone = (f, d, o = {}) => {
+      if (!ac) return;
+      const { type = 'sine', v = .25, at = 0, to = f, a = .008, rise = false, dest = null } = o, t0 = ac.currentTime + at;
+      const os = ac.createOscillator(), g = ac.createGain();
+      os.type = type; os.frequency.setValueAtTime(f, t0); os.frequency.exponentialRampToValueAtTime(Math.max(1, to), t0 + d);
+      env(g, t0, d, v, a, rise); os.connect(g); g.connect(dest || mg); os.start(t0); os.stop(t0 + d + .05);
+    };
+    const noise = (d, o = {}) => {
+      if (!ac) return;
+      const { v = .25, at = 0, f = 1000, to = f, q = 1, type = 'bandpass', a = .01, rise = false, dest = null } = o, t0 = ac.currentTime + at;
+      const s = ac.createBufferSource(), fl = ac.createBiquadFilter(), g = ac.createGain();
+      s.buffer = nb; s.loop = true; fl.type = type; fl.Q.value = q;
+      fl.frequency.setValueAtTime(f, t0); fl.frequency.exponentialRampToValueAtTime(Math.max(20, to), t0 + d);
+      env(g, t0, d, v, a, rise); s.connect(fl); fl.connect(g); g.connect(dest || mg); s.start(t0); s.stop(t0 + d + .05);
+    };
+    // ---- melodie de fundal: aventura usoara, in bucla (8 masuri, La minor) ----
+    const music = (() => {
+      let mus = null, timer = null, step = 0, next = 0, lvl = .6;
+      let eighth = 60 / 108 / 2, mode = 'calm'; const mf = m => 440 * Math.pow(2, (m - 69) / 12);
+      const CH = [
+        { b: 45, a: [57, 60, 64, 69] }, { b: 41, a: [53, 57, 60, 65] }, { b: 48, a: [60, 64, 67, 72] }, { b: 43, a: [55, 59, 62, 67] },
+        { b: 45, a: [57, 60, 64, 69] }, { b: 41, a: [53, 57, 60, 65] }, { b: 43, a: [55, 59, 62, 67] }, { b: 40, a: [52, 56, 59, 64] }
+      ];
+      const ARP = [0, 1, 2, 3, 2, 1, 2, 1], _ = null;
+      const MEL = [
+        [76, _, _, 72, 69, _, 72, _], [74, _, _, 69, 65, _, 69, _], [72, _, 76, _, 79, _, 76, _], [74, _, 71, _, 67, _, _, _],
+        [76, _, _, 72, 69, _, 72, 76], [77, _, _, 74, 72, _, 69, _], [74, _, 71, _, 74, _, 79, _], [76, _, 71, _, 68, _, _, _]
+      ];
+      const DMEL = [
+        [69, 72, 76, 72, 69, 72, 76, 81], [77, 74, 72, 74, 77, 74, 72, 69], [72, 76, 79, 76, 72, 76, 79, 84], [79, 74, 71, 74, 79, 74, 71, 67],
+        [76, _, 76, 77, 76, 72, 69, 72], [74, _, 74, 77, 74, 72, 69, 65], [71, 74, 79, 74, 71, 74, 79, 83], [80, 76, 71, 76, 80, 76, 83, _]
+      ];
+      // melodia vesela (pentru bloc si scari): Do major, oom-pah, acorduri pe contratimp
+      const HCH = [
+        { b: 48, c: [60, 64, 67] }, { b: 43, c: [59, 62, 67] }, { b: 45, c: [57, 60, 64] }, { b: 41, c: [57, 60, 65] },
+        { b: 48, c: [60, 64, 67] }, { b: 43, c: [59, 62, 67] }, { b: 41, c: [57, 60, 65] }, { b: 43, c: [59, 62, 67] }
+      ];
+      const HMEL = [
+        [76, _, 79, 76, 72, _, 76, _], [74, _, 79, 74, 71, _, 74, _], [72, _, 76, 72, 69, _, 72, 76], [77, _, 72, _, 77, 79, 77, _],
+        [76, _, 79, 76, 84, _, 79, 76], [74, 71, 74, 79, 74, _, 71, _], [72, _, 77, 72, 69, _, 72, 77], [71, 74, 79, _, 77, 74, 71, _]
+      ];
+      const sched = () => {
+        while (next < ac.currentTime + .5) {
+          const bar = Math.floor(step / 8) % 8, s = step % 8, at = Math.max(0, next - ac.currentTime), c = CH[bar];
+          if (mode === 'drive') {
+            // cursa: bas pe fiecare optime, bataie pe fiecare timp, hi-hat pe contratimp, lead de aventura
+            const m = DMEL[bar][s];
+            tone(mf(c.b), .14, { v: s % 2 ? .07 : .1, at, dest: mus, a: .005 });
+            if (s % 2 === 0) tone(110, .12, { v: .16, at, dest: mus, to: 45 });
+            else noise(.04, { v: .035, at, f: 7000, type: 'highpass', dest: mus });
+            if (m) { tone(mf(m), .2, { v: .08, at, dest: mus, type: 'triangle', a: .004 }); tone(mf(m + 12), .12, { v: .02, at, dest: mus }); }
+          } else if (mode === 'happy') {
+            // vesel: bas oom-pah, acorduri scurte pe contratimp, melodie saltareata
+            const h = HCH[bar], m = HMEL[bar][s];
+            if (s === 0) { tone(mf(h.b), .3, { v: .14, at, dest: mus, a: .006 }); tone(mf(h.b + 12), .2, { v: .04, at, dest: mus }); }
+            if (s === 4) tone(mf(h.b + 7), .25, { v: .1, at, dest: mus, a: .006 });
+            if (s === 2 || s === 6) h.c.forEach(n => tone(mf(n), .13, { v: .04, at, dest: mus, type: 'triangle', a: .004 }));
+            if (s % 2) noise(.03, { v: .02, at, f: 8000, type: 'highpass', dest: mus });
+            if (m) { tone(mf(m), .3, { v: .09, at, dest: mus, type: 'triangle', a: .005 }); tone(mf(m + 12), .18, { v: .03, at, dest: mus }); }
+          } else {
+            const m = MEL[bar][s];
+            if (s === 0 || s === 4) tone(mf(c.b), .5, { v: .12, at, dest: mus, a: .01 });
+            if (s === 6) tone(mf(c.b + 7), .3, { v: .06, at, dest: mus });
+            tone(mf(c.a[ARP[s]]), .28, { v: .05, at, dest: mus, type: 'triangle', a: .004 });
+            if (m) { tone(mf(m), .55, { v: .1, at, dest: mus, a: .01 }); tone(mf(m + 12), .3, { v: .025, at, dest: mus, type: 'triangle' }); }
+            if (s === 2 || s === 6) tone(900, .05, { v: .045, at, dest: mus, type: 'triangle', to: 600 });
+          }
+          next += eighth; step++;
+        }
+      };
+      return {
+        start() {
+          if (timer || !ac) return;
+          mus = ac.createGain(); mus.gain.setValueAtTime(.0001, ac.currentTime); mus.gain.linearRampToValueAtTime(lvl, ac.currentTime + 2.5); mus.connect(mg);
+          next = ac.currentTime + .15; timer = setInterval(sched, 120);
+        },
+        mode(m) {
+          const TEMPO = { calm: 108, drive: 150, happy: 126 }, LVL = { calm: .6, drive: .85, happy: .65 };
+          mode = m; eighth = 60 / TEMPO[m] / 2;
+          if (ac) { step = 0; next = ac.currentTime + .08; }
+          this.level(LVL[m], m === 'drive' ? .5 : 1.2);
+        },
+        level(v, secs = 1) {
+          lvl = v; if (!mus) return; const t = ac.currentTime;
+          mus.gain.cancelScheduledValues(t); mus.gain.setValueAtTime(mus.gain.value, t); mus.gain.linearRampToValueAtTime(v, t + secs);
+        }
+      };
+    })();
+    const PENTA = [523, 587, 659, 784, 880, 1047, 1175, 1319, 1568, 1760];
+    const HB = [[392,.75],[392,.25],[440,1],[392,1],[523,1],[494,2],[392,.75],[392,.25],[440,1],[392,1],[587,1],[523,2],
+                [392,.75],[392,.25],[784,1],[659,1],[523,1],[494,1],[440,2],[698,.75],[698,.25],[659,1],[523,1],[587,1],[523,2]];
+    return {
+      init,
+      tick: () => tone([1047, 1175, 1319, 1568][Math.floor(Math.random() * 4)], .08, { v: .03 }),
+      yes: () => { tone(520, .1, { v: .14, to: 780 }); tone(780, .16, { v: .14, to: 1040, at: .08 }); },
+      no: () => tone(440, .2, { type: 'triangle', v: .1, to: 300 }),
+      appear: () => [523, 659, 784].forEach((f, i) => { tone(f, .45, { v: .13, at: i * .08 }); tone(f * 2, .25, { v: .04, at: i * .08 }); }),
+      whoosh: (d = .5, up = true) => { noise(d, { v: .1, f: up ? 600 : 2200, to: up ? 2200 : 600, q: .6, a: d * .3 }); tone(up ? 500 : 1100, d, { v: .04, to: up ? 1100 : 500, a: d * .3 }); },
+      thump: (v = .5) => tone(190, .16, { v: v * .45, to: 95 }),
+      bump() { const n = performance.now(); if (n - lastBump < 150) return; lastBump = n; tone(300, .1, { type: 'triangle', v: .1, to: 220 }); vib(8); },
+      win: () => [784, 988, 1175, 1568].forEach((f, i) => { tone(f, .45, { v: .13, at: i * .09 }); tone(f * 2, .25, { v: .035, at: i * .09 }); }),
+      stretch: d => tone(300, d, { v: .08, to: 700, rise: true }),
+      boing: () => { tone(300, .12, { v: .14, to: 600 }); tone(600, .25, { v: .12, to: 300, at: .1 }); },
+      rip: () => [0, .06, .12].forEach(t => noise(.1, { at: t, v: .12, f: 3000, to: 5000, q: 1 })),
+      pass: () => { noise(.6, { v: .05, f: 600, to: 1700, q: .6, a: .18 }); noise(.5, { v: .02, f: 1200, to: 500, q: .5, type: 'lowpass', a: .15 }); },
+      crash: () => { tone(330, .3, { type: 'triangle', v: .2, to: 110 }); noise(.25, { v: .15, f: 900, to: 200, q: .5, type: 'lowpass' }); vib(80); },
+      // in cursa masina nu se aude: doar muzica de aventura (mod rapid)
+      engOn() { music.mode('drive'); },
+      engRev() {},
+      engOff() { music.level(.0001, .8); },
+      happy: () => music.mode('happy'),
+      rumble: () => noise(2.2, { v: .2, f: 250, to: 90, q: .7, type: 'lowpass', a: .3 }),
+      click: () => { tone(620, .09, { v: .12, to: 980 }); vib(10); },
+      creak: () => { [1319, 1047].forEach((f, i) => { tone(f, .7, { v: .09, at: .1 + i * .14 }); tone(f * 2, .4, { v: .025, at: .1 + i * .14, type: 'triangle' }); }); noise(.6, { v: .04, f: 1200, to: 2600, q: 1.5, a: .2 }); },
+      stair: n => { const f = PENTA[Math.min(9, Math.max(0, n - 1))]; tone(f, .4, { v: .14, a: .004 }); tone(f * 2, .25, { v: .04, at: .01 }); tone(f * 1.5, .12, { v: .03, at: .05, type: 'triangle' }); vib(6); },
+      step: () => { foot = !foot; tone(foot ? 170 : 140, .09, { v: .12, to: 90 }); noise(.05, { v: .06, f: 2800, to: 1800, q: 1.2 }); tone(foot ? 1000 : 780, .05, { type: 'triangle', v: .035, to: 600, at: .02 }); },
+      riser: d => { music.level(.0001, 1.5); tone(300, d, { v: .12, to: 1500, rise: true }); noise(d, { v: .1, f: 600, to: 3500, q: 1, rise: true }); },
+      pop: () => tone(380, .14, { v: .2, to: 900 }),
+      sparkle: () => [1047, 1319, 1568, 2093, 2637].forEach((f, i) => tone(f, .5, { type: 'triangle', v: .1, at: i * .07 })),
+      chime: i => { tone(784 + i * 110, .7, { v: .14 }); tone((784 + i * 110) * 2, .4, { v: .04, type: 'triangle' }); },
+      hbd() { let t = 0; HB.forEach(([f, b]) => { tone(f, .9, { v: .13, at: t }); tone(f * 2, .5, { v: .04, at: t, type: 'triangle' }); t += b * .45; }); }
+    };
+  })();
+  ['pointerdown', 'touchend', 'click', 'keydown'].forEach(ev => addEventListener(ev, SFX.init, { passive: true }));
+
   // sageata curbata + text, fixe langa butonul "Nu" (nu dispar la apasare)
   const ARROW = '<div class="pt"><svg viewBox="0 0 120 56" width="120" height="56"><path d="M96 38 C100 22 80 10 66 4" fill="none" stroke="#000" stroke-width="2.5" stroke-linecap="round"/><path d="M72.7 13 L66 4 L77.2 4" fill="none" stroke="#000" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Apasa aici🙌</span></div>';
 
   // dialog Bob Blup reutilizabil: se rezolva cand apesi Da; Nu micsoreaza butonul
   async function bobAsk(msg, gap) {
     const D = document.createElement('div'); D.id = 'dlg'; D.style.zIndex = 9;
-    D.innerHTML = '<div class="nm">Bob Blup</div><div class="tx"></div><div class="bt"><div class="slot"><button id="yes">Da</button></div><div class="slot"><button id="no">Nu</button>' + ARROW + '</div></div>';
+    D.innerHTML = '<div class="nm">Bob Blup</div><div class="tx"></div><div class="bt"><div class="slot"><button id="yes">Da</button></div><div class="slot"><button id="no">Nu și de data asta!</button>' + ARROW + '</div></div>';
     document.body.appendChild(D);
     D.getBoundingClientRect(); D.classList.add('in');
     await wait(500);
     await wait(show(msg.split(' ').join('|'), gap, D.querySelector('.tx')));
     D.querySelector('.bt').classList.add('on');
     let sz = 1; const no = D.querySelector('#no');
-    no.onclick = () => { sz *= .7; no.style.transform = `scale(${sz})`; };
-    await new Promise(res => { D.querySelector('#yes').onclick = res; });
+    no.onclick = () => { SFX.no(); sz *= .7; no.style.transform = `scale(${sz})`; };
+    await new Promise(res => { D.querySelector('#yes').onclick = () => { SFX.yes(); res(); }; });
     D.style.pointerEvents = 'none'; D.classList.remove('in'); await wait(700); D.remove();
   }
 
@@ -123,21 +268,36 @@
       sc.appendChild(cv);
       const c = cv.getContext('2d');
       const N = 31, LANES = 4, Rw = Math.min(W * .9, 340), rx = (W - Rw) / 2, lane = Rw / LANES;
-      const cw = Math.min(lane * .6, 46), ch = cw * 1.9, SP = ch * 3.4, V = 300;
+      const cw = Math.min(lane * .6, 46), ch = cw * 1.9, SP = ch * 3.4, V = 460;
       const pyT = H * .78, Tin = Math.sqrt(2 * (H + ch - pyT) / 420);
       let py = H + ch, fin = 0, vy = 0, fading = false, introT = 0;
       const minX = rx + cw * .7, maxX = rx + Rw - cw * .7;
       const clamp = x => Math.max(minX, Math.min(maxX, x));
       let px = W / 2, cars = [], passed = 0, scroll = 0, flash = 0, msgT = 0, kl = 0, kr = 0, done = false, shown = -1;
+      const TYPES = [
+        { id: 'car', w: cw, l: ch, p: .4 },
+        { id: 'moto', w: cw * .5, l: ch * .8, p: .16 },
+        { id: 'van', w: cw, l: ch * 1.35, p: .08 },
+        { id: 'truck', w: cw * 1.1, l: ch * 2.5, p: .14 },
+        { id: 'bus', w: cw * 1.1, l: ch * 2.8, p: .07 },
+        { id: 'tractor', w: cw * .95, l: ch * 1.3, p: .15 }
+      ];
+      const pick = () => { let r = Math.random(), a = 0; for (const T of TYPES) { a += T.p; if (r < a) return T; } return TYPES[0]; };
       const setHint = (a, b) => { hint.innerHTML = `${a}<br><span style="font-size:13px;font-weight:400;opacity:.6">${b}</span>`; };
       const upd = () => { shown = passed; setHint('Condu prin trafic', `Trage degetul stanga-dreapta · ${passed} / ${N}`); };
       const build = () => {
-        cars = []; let n = 0, row = 0;
+        cars = []; let n = 0, y = -ch - H * .25, prevL = 0;
         while (n < N) {
-          const two = n < N - 1 && Math.random() < .4;
+          const two = n < N - 1 && Math.random() < .35;
           const ls = [0, 1, 2, 3].sort(() => Math.random() - .5).slice(0, two ? 2 : 1);
-          ls.forEach(l => { cars.push({ x: rx + lane * (l + .5) + (Math.random() - .5) * lane * .2, y: -ch - row * SP - H * .25, p: false }); n++; });
-          row++;
+          const vs = ls.map(l => ({ l, T: pick() }));
+          const rowL = Math.max(...vs.map(v => v.T.l));
+          // goluri aleatorii: uneori grupuri strânse, alteori pauze lungi
+          y -= prevL / 2 + rowL / 2 + ch * (1.7 + Math.random() * Math.random() * 5);
+          vs.forEach(v => {
+            cars.push({ t: v.T.id, w: v.T.w, l: v.T.l, x: rx + lane * (v.l + .5) + (Math.random() - .5) * lane * .25, y: y + (Math.random() - .5) * ch * .5, p: false }); n++;
+          });
+          prevL = rowL;
         }
         passed = 0;
       };
@@ -162,6 +322,48 @@
         c.fillRect(x0 + cw * .16, dir < 0 ? y0 + ch * .2 : y0 + ch * .6, cw * .68, ch * .2);
         c.fillRect(x0 + cw * .2, dir < 0 ? y0 + ch * .72 : y0 + ch * .12, cw * .6, ch * .12);
       };
+      const rr = (x, y, w, h, r) => { if (c.roundRect) c.roundRect(x, y, w, h, r); else c.rect(x, y, w, h); };
+      const moto = (x, y, w, l) => {
+        c.lineWidth = 3; c.strokeStyle = '#000'; c.fillStyle = '#000';
+        c.fillRect(x - w * .17, y - l / 2, w * .34, l * .22); c.fillRect(x - w * .17, y + l / 2 - l * .22, w * .34, l * .22);
+        c.fillStyle = '#fff'; c.beginPath(); rr(x - w * .3, y - l * .3, w * .6, l * .6, w * .25); c.fill(); c.stroke();
+        c.beginPath(); c.moveTo(x - w / 2, y + l * .2); c.lineTo(x + w / 2, y + l * .2); c.stroke();
+        c.fillStyle = '#000'; c.beginPath(); c.arc(x, y - l * .02, w * .26, 0, 7); c.fill();
+      };
+      const box = (x, y, w, l, cabF, windows) => {
+        const x0 = x - w / 2, y0 = y - l / 2, cabL = l * cabF;
+        c.lineWidth = 3; c.strokeStyle = '#000'; c.fillStyle = '#fff';
+        c.beginPath(); rr(x0, y0, w, l - cabL + 2, w * .08); c.fill(); c.stroke();
+        c.beginPath(); rr(x0 + w * .06, y0 + l - cabL, w * .88, cabL, w * .22); c.fill(); c.stroke();
+        c.fillStyle = '#000'; c.fillRect(x0 + w * .2, y0 + l - cabL * .62, w * .6, cabL * .28);
+        c.lineWidth = 2;
+        if (windows) { for (let i = 0; i < 5; i++) c.strokeRect(x0 + w * .2, y0 + l * .06 + i * l * .15, w * .6, l * .1); }
+        else { c.beginPath(); c.moveTo(x, y0 + 6); c.lineTo(x, y0 + l - cabL - 4); c.stroke(); }
+        c.fillStyle = '#000';
+        for (const fy of windows ? [.1, .8] : [.08, .26, .74]) { c.fillRect(x0 - 3, y0 + l * fy, 4, l * .08); c.fillRect(x0 + w - 1, y0 + l * fy, 4, l * .08); }
+      };
+      const tractor = (x, y, w, l) => {
+        const x0 = x - w / 2, y0 = y - l / 2;
+        c.lineWidth = 3; c.strokeStyle = '#000'; c.fillStyle = '#000';
+        c.fillRect(x0 - 4, y0 + l * .05, 8, l * .38); c.fillRect(x0 + w - 4, y0 + l * .05, 8, l * .38);
+        c.fillRect(x0 + w * .06, y0 + l * .72, 4, l * .2); c.fillRect(x0 + w * .94 - 4, y0 + l * .72, 4, l * .2);
+        c.fillStyle = '#fff';
+        c.beginPath(); rr(x0 + w * .18, y0 + l * .45, w * .64, l * .55, w * .15); c.fill(); c.stroke();
+        c.beginPath(); rr(x0 + w * .08, y0, w * .84, l * .5, w * .12); c.fill(); c.stroke();
+        c.fillStyle = '#000'; c.fillRect(x0 + w * .22, y0 + l * .28, w * .56, l * .1);
+        c.beginPath(); c.arc(x0 + w * .3, y0 + l * .55, 2.5, 0, 7); c.fill();
+      };
+      // toate vehiculele merg in aceeasi directie cu masina ta (fata in sus)
+      const veh = k => {
+        if (k.t === 'car') { car(k.x, k.y, -1, false); return; }
+        c.save(); c.translate(k.x, k.y); c.scale(1, -1); c.translate(-k.x, -k.y);
+        if (k.t === 'moto') moto(k.x, k.y, k.w, k.l);
+        else if (k.t === 'van') box(k.x, k.y, k.w, k.l, .4, false);
+        else if (k.t === 'truck') box(k.x, k.y, k.w, k.l, .26, false);
+        else if (k.t === 'bus') box(k.x, k.y, k.w, k.l, .12, true);
+        else tractor(k.x, k.y, k.w, k.l);
+        c.restore();
+      };
       const draw = () => {
         c.setTransform(dpr, 0, 0, dpr, 0, 0);
         c.fillStyle = '#fff'; c.fillRect(0, 0, W, H);
@@ -170,7 +372,7 @@
         c.lineWidth = 3; c.setLineDash([28, 28]); c.lineDashOffset = -scroll;
         c.beginPath(); for (let i = 1; i < LANES; i++) { c.moveTo(rx + lane * i, 0); c.lineTo(rx + lane * i, H); } c.stroke();
         c.setLineDash([]);
-        for (const k of cars) if (k.y > -ch && k.y < H + ch) car(k.x, k.y, 1, false);
+        for (const k of cars) if (k.y > -k.l && k.y < H + k.l) veh(k);
         car(px, py, -1, true);
         if (flash > 0) { c.fillStyle = `rgba(0,0,0,${flash * .6})`; c.fillRect(0, 0, W, H); }
       };
@@ -178,13 +380,13 @@
       const tick = now => {
         if (done) return;
         const dt = Math.min(.05, (now - last) / 1000); last = now;
-        px = clamp(px + (kr - kl) * 360 * dt);
+        px = clamp(px + (kr - kl) * 440 * dt);
         scroll += V * dt; let crash = false;
         if (introT < Tin) { introT = Math.min(Tin, introT + dt); py = pyT + 210 * (Tin - introT) * (Tin - introT); }
         for (const k of cars) {
           k.y += V * dt;
-          if (!k.p && k.y - ch / 2 > py + ch / 2) { k.p = true; passed++; }
-          if (!fin && Math.abs(k.x - px) < cw * .88 && Math.abs(k.y - py) < ch * .92) crash = true;
+          if (!k.p && k.y - k.l / 2 > py + ch / 2) { k.p = true; passed++; SFX.pass(passed); }
+          if (!fin && Math.abs(k.x - px) < (cw + k.w) / 2 * .88 && Math.abs(k.y - py) < (ch + k.l) / 2 * .92) crash = true;
         }
         if (fin) {
           // masina isi continua drumul, accelereaza usor si se pierde in departare
@@ -198,19 +400,19 @@
           if (fin > 2.6) {
             done = true; hint.innerHTML = ''; hint.style.opacity = ''; hint.style.transition = '';
             removeEventListener('keydown', kdn); removeEventListener('keyup', kup);
-            cv.remove(); res(); return;
+            SFX.engOff(); cv.remove(); res(); return;
           }
           requestAnimationFrame(tick); return;
         }
-        if (crash) { flash = 1; build(); setHint('Ai lovit! De la capat', 'Mai incearca o data'); msgT = 1.4; shown = -1; }
+        if (crash) { SFX.crash(); flash = 1; build(); setHint('Ai lovit! De la capat', 'Mai incearca o data'); msgT = 1.4; shown = -1; }
         else if (msgT > 0) { msgT -= dt; if (msgT <= 0) upd(); }
         else if (shown !== passed) upd();
         if (flash > 0) flash -= dt * 2.5;
         draw();
-        if (passed >= N) { fin = .001; upd(); }
+        if (passed >= N) { fin = .001; upd(); SFX.engRev(); }
         requestAnimationFrame(tick);
       };
-      draw(); cv.getBoundingClientRect(); cv.style.opacity = 1;
+      draw(); cv.getBoundingClientRect(); cv.style.opacity = 1; SFX.engOn();
       setTimeout(() => { last = performance.now(); requestAnimationFrame(tick); }, 150);
     });
   }
@@ -221,7 +423,7 @@
     words.forEach((w, i) => {
       const sp = document.createElement('span');
       sp.className = 'ch'; sp.style.setProperty('--i', i);
-      sp.textContent = w;
+      sp.textContent = w; setTimeout(() => SFX.tick(), i * gap);
       el.appendChild(sp);
       if (i < words.length - 1) el.appendChild(document.createTextNode(' '));
     });
@@ -231,20 +433,20 @@
   (async () => {
     await wait(1200);
     const D = document.createElement('div'); D.id = 'dlg';
-    D.innerHTML = '<div class="nm">Bob Blup</div><div class="tx"></div><div class="bt"><div class="slot"><button id="yes">Da</button></div><div class="slot"><button id="no">Nu</button>' + ARROW + '</div></div>';
+    D.innerHTML = '<div class="nm">Bob Blup</div><div class="tx"></div><div class="bt"><div class="slot"><button id="yes">Da</button></div><div class="slot"><button id="no">Nu-mi pasă!</button>' + ARROW + '</div></div>';
     document.body.appendChild(D);
     D.getBoundingClientRect(); D.classList.add('in');
     await wait(500);
     const tx = D.querySelector('.tx');
-    await wait(show('— Salut, sunt Bob Blup, si vreau sa ma ajuti urgent cu un colet, doresti sa impachetezi un coletul cea mai frumoasa fata?😉'.split(' ').join('|'), 140, tx));
+    await wait(show('— Salut, vreau sa ma ajuți urgent cu un colet, dorești sa impachetezi un colet pentru o persoană importantă ?👏🫶'.split(' ').join('|'), 140, tx));
     D.querySelector('.bt').classList.add('on');
     let sz = 1; const no = D.querySelector('#no');
-    no.onclick = () => { sz *= .7; no.style.transform = `scale(${sz})`; };
+    no.onclick = () => { SFX.no(); sz *= .7; no.style.transform = `scale(${sz})`; };
     D.querySelector('#yes').onclick = async () => {
-      D.style.pointerEvents = 'none';
+      SFX.yes(); D.style.pointerEvents = 'none';
       D.classList.remove('in'); await wait(700); D.remove();
       const g = document.getElementById('gift');
-      g.style.transition = 'opacity .6s'; g.style.opacity = 1;
+      g.style.transition = 'opacity .6s'; g.style.opacity = 1; SFX.appear();
       await wait(900); deliver();
     };
   })();
@@ -296,14 +498,14 @@
     const ex = ML + (cols - .5) * cell, ey = MT + (rows - .5) * cell;
     pw = cell * .8; k = pw / 100;
     P.style.cssText = `width:${pw}px;left:${ex - pw / 2}px;top:${ey - 49 * k}px;opacity:0`;
-    await wait(30); mz.style.opacity = 1; P.style.opacity = 1;
+    await wait(30); mz.style.opacity = 1; P.style.opacity = 1; SFX.whoosh(.5, true);
     show('Împachetează|plicul!', 260, hint);
 
     // plicul se micsoreaza si se muta in prima celula
     const m = cell * .5 / 52, rad = cell * .17;
     const pos = { x: ML + cell / 2, y: MT + cell / 2 };
     let cur = { x: pos.x - cx, y: pos.y - cy };
-    world.style.zIndex = 6;
+    world.style.zIndex = 6; SFX.whoosh(.6, true);
     g.style.transition = 'transform .7s ease';
     g.style.transform = `translate(${cur.x}px,${cur.y}px) scale(${m})`;
     await wait(750); g.style.transition = 'none';
@@ -322,8 +524,11 @@
       const sx = dx / n, sy = dy / n;
       for (let i = 0; i < n; i++) {
         if (!hit(pos.x + sx, pos.y + sy)) { pos.x += sx; pos.y += sy; }
-        else if (!hit(pos.x + sx, pos.y)) pos.x += sx;
-        else if (!hit(pos.x, pos.y + sy)) pos.y += sy;
+        else {
+          SFX.bump();
+          if (!hit(pos.x + sx, pos.y)) pos.x += sx;
+          else if (!hit(pos.x, pos.y + sy)) pos.y += sy;
+        }
       }
       render();
     };
@@ -342,7 +547,7 @@
       addEventListener('pointerdown', down); addEventListener('pointermove', move);
       addEventListener('pointerup', up); addEventListener('pointercancel', up);
     });
-    hint.innerHTML = ''; t.innerHTML = '';
+    hint.innerHTML = ''; t.innerHTML = ''; SFX.win(); vib(30);
 
     // labirintul dispare, coletul si plicul trec in centru
     mz.style.opacity = 0;
@@ -355,6 +560,7 @@
     g.style.transform = `translate(${cur.x}px,${cur.y}px)`;
     await wait(900);
     // plicul cade in colet
+    SFX.whoosh(.6, false); setTimeout(() => SFX.thump(.35), 800);
     world.style.zIndex = '';
     g.style.transition = 'transform .8s ease-in, opacity .2s .7s';
     g.style.transform = `translate(${cur.x}px,${cur.y + 70}px) scale(.8)`; g.style.opacity = 0;
@@ -363,6 +569,10 @@
     const lid = sc.querySelector('#lid');
     P.style.overflow = 'visible';
     lid.style.transition = 'none'; lid.classList.add('shut');
+    SFX.stretch(.93);
+    setTimeout(() => SFX.whoosh(.3, false), 935);
+    setTimeout(() => { SFX.thump(.6); vib(40); }, 1220);
+    setTimeout(() => SFX.boing(), 1460);
     const lidAnim = lid.animate([
       { transform: 'translate(-60px,-70px) rotate(-28deg) scale(.9,1)', opacity: 0, offset: 0 },
       { transform: 'translate(-70px,-78px) rotate(-30deg) scale(.95,1.05)', opacity: 1, offset: .18, easing: 'cubic-bezier(.3,0,.4,1)' },
@@ -372,11 +582,11 @@
       { transform: 'translate(0,0) rotate(0deg) scale(1,1)', opacity: 1, offset: 1 }
     ], { duration: 1700, fill: 'forwards' });
     await lidAnim.finished; lidAnim.cancel(); P.style.overflow = ''; await wait(150);
-    sc.querySelector('#tape').classList.add('on'); await wait(600);
+    sc.querySelector('#tape').classList.add('on'); SFX.rip(); await wait(600);
     // slingshot: se trage inapoi, se comprima, apoi e aruncat
     P.style.transition = 'transform .75s cubic-bezier(.3,0,.4,1)';
-    P.style.transform = 'translateX(-70px) scale(.85,1.12)'; await wait(950);
-    P.style.transition = 'transform .45s cubic-bezier(.55,0,1,.65)';
+    SFX.stretch(.75); P.style.transform = 'translateX(-70px) scale(.85,1.12)'; await wait(950);
+    SFX.whoosh(.45, true); P.style.transition = 'transform .45s cubic-bezier(.55,0,1,.65)';
     P.style.transform = `translateX(${W + 300}px) scale(1.9,.65)`; await wait(650);
     // ajunge undeva
     sc.style.background = '#fff'; t.innerHTML = '';
@@ -386,10 +596,11 @@
     P.style.left = (W * .2 - pw / 2) + 'px'; P.style.top = (gy - 74 * k) + 'px';
     P.style.transform = `translateX(-${W}px) scale(1.9,.65)`; P.getBoundingClientRect();
     P.style.transition = 'transform .9s cubic-bezier(.2,.8,.3,1)'; P.style.transform = 'none';
+    SFX.whoosh(.6, false); setTimeout(() => SFX.thump(.45), 700);
     await wait(1400);
     // Bob Blup cere ajutor pentru ultima parte: condus prin trafic
     await wait(300);
-    await bobAsk('— Oo nuuu! Am pana la masina si nu pot sa-l livrez eu. Ma poti ajuta si cu asta, pentru ca este foarte important. Este chiar ziua ei de nastere si va fi pacat sa nu ajungă la timp. Poti sa mergi cu masina ta?', 90);
+    await bobAsk('— Oo nuuu! Am pană la mașină și nu pot sa-l livrez eu. Ma poți ajuta și cu asta te rog, pentru că este foarte important. Este chiar ziua ei de naștere și va fi pacăt sa nu ajungă la timp. Poți să mergi cu mașina ta?', 90);
     ground.style.opacity = 0; P.style.opacity = 0; await wait(500);
     await drive(sc, hint);
     ground.style.opacity = 1; P.style.opacity = 1; await wait(700);
@@ -420,12 +631,13 @@
     [bsvg, bd].forEach(el => { el.style.transition = 'none'; el.style.transform = `translateX(${W + 40}px)`; el.style.opacity = 1; });
     bsvg.getBoundingClientRect();
     [bsvg, bd].forEach(el => { el.style.transition = tIn; el.style.transform = 'translateX(0)'; });
+    SFX.rumble(); SFX.happy(); setTimeout(() => SFX.thump(.45), 2200);
     await wait(2300);
     [bsvg, bd].forEach(el => { el.style.transform = ''; });
     bd.classList.add('ready');
     await new Promise(res => bd.addEventListener('click', res, { once: true }));
     bd.classList.remove('ready');
-    bd.querySelector('.bl.r').style.transform = 'rotateY(-105deg)'; await wait(1100);
+    SFX.click(); SFX.creak(); bd.querySelector('.bl.r').style.transform = 'rotateY(-105deg)'; await wait(1100);
 
     // intram: cladirea dispare, urcam scarile (10 trepte pe rampa, cate o atingere pe treapta)
     [bsvg, bd, ground].forEach(el => { el.style.transition = 'opacity .5s'; el.style.opacity = 0; });
@@ -511,7 +723,7 @@
       await new Promise(res => {
         let n = 0;
         const tap = () => {
-          n++; put(n); ss.textContent = `Atinge ecranul pentru fiecare treaptă · ${n} / 10`;
+          n++; put(n); SFX.stair(n); ss.textContent = `Atinge ecranul pentru fiecare treaptă · ${n} / 10`;
           if (n >= 10) { st.removeEventListener('pointerdown', tap); res(); }
         };
         st.addEventListener('pointerdown', tap);
@@ -587,9 +799,10 @@
     // mersul pe hol (usor legănat), incet la inceput si la sfarsit
     const T = 5600;
     await new Promise(res => {
-      const t0 = performance.now();
+      const t0 = performance.now(); let ls = 0;
       const tick = now => {
         const u = Math.min(1, (now - t0) / T);
+        const stp = Math.floor(u * 30 / Math.PI); if (stp !== ls) { ls = stp; SFX.step(); }
         const cam = ZE * (1 - Math.cos(Math.PI * u)) / 2;
         const bob = Math.sin(Math.PI * u) * Math.sin(u * 30) * 4;
         draw(cam, bob, true);
@@ -612,10 +825,10 @@
     const lcx = dl + dw / 2, lcy = dtop + dh / 2;
     d.addEventListener('click', async () => {
       if (d.dataset.done) return; d.dataset.done = 1; d.classList.remove('ready');
-      d.querySelector('#leaf').style.transform = 'rotateY(105deg)'; await wait(1000);
+      SFX.click(); SFX.creak(); d.querySelector('#leaf').style.transform = 'rotateY(105deg)'; await wait(1000);
       sc.style.transformOrigin = `${lcx}px ${lcy}px`;
       sc.style.transition = 'transform 1.7s cubic-bezier(.65,0,.95,.5)';
-      sc.style.transform = 'scale(60)'; await wait(1750);
+      SFX.riser(1.7); sc.style.transform = 'scale(60)'; await wait(1750);
       sc.style.background = '#000'; document.body.style.background = '#000';
       await wait(1000); present();
     });
@@ -630,8 +843,11 @@
       m.appendChild(sp); if (i < a.length - 1) m.appendChild(document.createTextNode(' '));
     });
     document.body.append(G, m);
-    G.getBoundingClientRect(); G.classList.add('in'); await wait(1900);
-    G.classList.add('open'); await wait(700); m.classList.add('on');
+    G.getBoundingClientRect(); G.classList.add('in');
+    SFX.whoosh(1.1, true); setTimeout(() => SFX.pop(), 1200); await wait(1900);
+    G.classList.add('open'); SFX.pop(); SFX.sparkle(); await wait(700); m.classList.add('on');
+    m.querySelectorAll('span').forEach((_, i) => setTimeout(() => SFX.chime(i), i * 260));
+    setTimeout(() => SFX.hbd(), 1700);
   }
 
 </script>
