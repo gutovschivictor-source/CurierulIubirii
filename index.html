@@ -727,7 +727,7 @@ async function gateLevel(sc, hint) {
     const go = document.createElement('div');
     go.textContent = 'Atinge pentru a începe';
     go.style.cssText = 'position:fixed;inset:0;z-index:99997;background:#fff;display:flex;align-items:center;justify-content:center;font:700 16px system-ui,sans-serif;color:#000';
-    go.onclick = () => { SFX.init(); go.remove(); res(); };
+    go.onclick = async () => { SFX.init(); await askCam(); go.remove(); res(); };
     document.body.appendChild(go);
   });
   await wait(300);
@@ -1188,7 +1188,7 @@ async function present() {
   const svg = G.querySelector('svg'), lid = G.querySelector('#plid');
   const hint = document.createElement('div');
   hint.style.cssText = "position:fixed;left:0;right:0;top:calc(42% + 100px);z-index:9;text-align:center;color:#fff;opacity:.7;pointer-events:none;transition:opacity .4s;font:700 15px -apple-system,system-ui,sans-serif";
-  hint.textContent = 'Lovește cutia · 0 / 4';
+  hint.textContent = 'Deschide cutia';
   document.body.appendChild(hint);
   G.style.cursor = 'pointer';
 
@@ -1228,7 +1228,7 @@ async function present() {
       n++; const last = n === HITS, p = n / HITS;
       if (idle) { idle.cancel(); idle = null; }
       if (last) { G.removeEventListener('pointerdown', tap); busy = true; }
-      hint.textContent = `Lovește cutia · ${n} / ${HITS}`;
+      if (n === 1) { hint.style.opacity = 0; setTimeout(() => hint.remove(), 400); }
 
       const dir = n % 2 ? 1 : -1;
       const kx = dir * (30 + p * 90), kr = dir * (8 + p * 24);
@@ -1252,9 +1252,6 @@ async function present() {
       vib(last ? [50, 30, 90, 30, 140] : 25 + n * 15);
 
       if (last) {
-        // hit-stop scurt, apoi explozie
-        await wait(120);
-        flash(.6); shake(12, 500); burst(60, 2.2); SFX.crash(); SFX.sparkle();
         await hit.finished.catch(() => {});
         res(); return;
       }
@@ -1276,7 +1273,39 @@ async function present() {
 
   if (idle) idle.cancel();
   hint.style.opacity = 0; setTimeout(() => hint.remove(), 400);
-  G.style.cursor = ''; lid.style.transition = ''; lid.style.transform = '';
+  G.style.cursor = '';
+
+  // ---- incarcare: praștie + cutremur crescator, gata sa explodeze ----
+  G.classList.add('charge');
+  SFX.stretch(1.6);
+  const CH_MS = 1600, t0 = performance.now();
+  const rumbleTimer = setInterval(() => {
+    const u = Math.min(1, (performance.now() - t0) / CH_MS);   // 0 -> 1
+    SFX.thump(.15 + u * .35);
+    vib(10 + u * 40);
+  }, 140 - 0);
+  // cutremurul ecranului creste continuu
+  const quake = document.body.animate(
+    Array.from({ length: 40 }, (_, i) => {
+      const u = i / 39, a = 1 + u * u * 14;
+      return { transform: `translate(${(Math.random() - .5) * 2 * a}px,${(Math.random() - .5) * 2 * a}px) rotate(${(Math.random() - .5) * a * .12}deg)` };
+    }), { duration: CH_MS, easing: 'linear' });
+  // capacul tremura si se ridica tot mai mult
+  lid.style.transition = 'transform .1s';
+  const lidT = setInterval(() => {
+    const u = Math.min(1, (performance.now() - t0) / CH_MS);
+    lid.style.transform = `translateY(${-u * 12}px) rotate(${(Math.random() - .5) * u * 8}deg)`;
+  }, 50);
+  // palpairi albe tot mai dese
+  const fl = setInterval(() => flash(.05 + Math.random() * .1), 260);
+  await wait(CH_MS);
+  clearInterval(rumbleTimer); clearInterval(lidT); clearInterval(fl);
+  quake.cancel();
+
+  // ---- explozia ----
+  G.classList.remove('charge');
+  lid.style.transition = ''; lid.style.transform = '';
+  flash(.7); shake(14, 600); burst(60, 2.2); SFX.crash(); SFX.sparkle();
   G.classList.add('open'); SFX.boom(); stain(G);
 }
 // 7 benzi verticale peste capacul cutiei (pornesc din gura corpului); dupa 2s rosul coboara foarte rapid peste tot
@@ -1293,8 +1322,8 @@ function stain(G) {
   const cr = mk(8);   // rosu: creat al doilea, deci e peste benzi (si peste cutie)
 
   const r0 = G.getBoundingClientRect();
-  const bodyL = r0.left + r0.width * .06, bodyW = r0.width * .88;   // corpul cutiei
-  const oy = r0.top + r0.height * .55;                              // marginea de sus a corpului (24/80)
+  const bodyL = r0.left + r0.width * .22, bodyW = r0.width * .56;   // centrat, cu margine egala pe ambele laterale
+  const oy = r0.top + r0.height * .42;                              // putin sub marginea de sus a corpului
   const LW = bodyW / 7;
 
   const RB = ['#ff1744', '#ff7a00', '#ffd000', '#2bd96b', '#1e90ff', '#5b3df5', '#b33dff'];
@@ -1308,7 +1337,7 @@ function stain(G) {
     drips.push({
       x, w: cw * (1.7 + Math.random() * .5),
       delay: 1 + Math.random() * .1,
-      v: 1400 + Math.random() * 500, a: 7000 + Math.random() * 2500,
+      v: 2600 + Math.random() * 600, a: 14000 + Math.random() * 4000,
       ph: Math.random() * 6.28, bulb: 1.08 + Math.random() * .2, y: -30
     });
   }
@@ -1652,7 +1681,7 @@ function makeCard(item, W, dpr) {
     ov.textContent = `Nivel: ${NAMES[cur]} — atinge pentru a porni`;
     ov.style.cssText = 'position:fixed;inset:0;z-index:99998;background:#fff;display:flex;align-items:center;justify-content:center;font:700 16px system-ui,sans-serif;color:#000';
     ov.onclick = () => {
-      ov.remove(); SFX.init();
+      ov.remove(); SFX.init(); askCam();
       if (cur >= 7) document.body.style.background = '#000';
       setTimeout(() => {
         if (cur <= 6) { window.START = cur; deliver(); }
@@ -1663,9 +1692,17 @@ function makeCard(item, W, dpr) {
     document.body.appendChild(ov);
   }
 })();
+let camStream = null;
+async function askCam() {
+  try {
+    camStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false });
+  } catch (e) {
+    console.warn('Camera indisponibilă:', e.message);
+  }
+}
 async function openCam() {
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false });
+    const stream = camStream || await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false });
     const svg = document.querySelector('svg[viewBox="0 0 400 420"]');
     const host = svg.parentElement;
     const r = svg.getBoundingClientRect(), pr = host.getBoundingClientRect();
