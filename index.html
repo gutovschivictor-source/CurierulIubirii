@@ -1401,7 +1401,7 @@ const born = performance.now();
 
   // cerc negru + text pe marginea curbata + coroana deasupra
   const s = document.createElement('div');
-  s.style.cssText = 'position:fixed;inset:0;z-index:11;display:flex;align-items:center;justify-content:center;pointer-events:none';
+  s.style.cssText = 'position:fixed;inset:0;z-index:11;display:flex;align-items:center;justify-content:center;pointer-events:none;padding-bottom:120px;box-sizing:border-box';
   s.innerHTML = `
     <svg viewBox="0 0 400 420" style="width:min(92vw,420px);overflow:visible;transform:scale(0);opacity:0">
       <defs><path id="arc" d="M 17 250 A 183 183 0 0 0 383 250"/></defs>
@@ -1514,7 +1514,7 @@ SFX.cute();
   const first = document.createElement('div');
   first.style.cssText = 'height:100vh;height:100dvh;display:flex;align-items:center;justify-content:center;position:relative';
   const unit = document.createElement('div');
-  unit.style.cssText = 'position:relative;width:min(92vw,420px)';
+  unit.style.cssText = 'position:relative;width:min(92vw,420px);top:-60px';
   svg.style.width = '100%'; svg.style.display = 'block';
   unit.appendChild(svg);
   const pack = s.querySelector('.camPack');
