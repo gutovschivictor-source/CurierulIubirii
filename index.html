@@ -114,6 +114,8 @@
 <script>
   const t = document.getElementById('txt');
   const wait = ms => new Promise(r => setTimeout(r, ms));
+// fără muzică de fundal în intro (în modul cu butonul de nivele, muzica merge ca înainte)
+window.noMusic = !(+location.hash.slice(1) && innerWidth > 700);
 
   /* ===== SUNETE (sintetizate, fara fisiere) ===== */
   const vib = p => { try { navigator.vibrate && navigator.vibrate(p); } catch (_) {} };
@@ -230,7 +232,7 @@ const noise = (d, o = {}) => {
       };
       return {
         start() {
-          if (timer || !ac) return;
+          if (timer || !ac || window.noMusic) return;
           mus = ac.createGain(); mus.gain.setValueAtTime(.0001, ac.currentTime); mus.gain.linearRampToValueAtTime(lvl, ac.currentTime + .4); mus.connect(mg);
           next = ac.currentTime + .15; timer = setInterval(sched, 120);
         },
@@ -316,7 +318,27 @@ const noise = (d, o = {}) => {
       },
       sparkle: () => [1047, 1319, 1568, 2093, 2637].forEach((f, i) => tone(f, .5, { type: 'triangle', v: .1, at: i * .07 })),
       chime: i => { tone(784 + i * 110, .7, { v: .14 }); tone((784 + i * 110) * 2, .4, { v: .04, type: 'triangle' }); },
-      hbd() { let t = 0; HB.forEach(([f, b]) => { tone(f, .9, { v: .13, at: t }); tone(f * 2, .5, { v: .04, at: t, type: 'triangle' }); t += b * .45; }); return t + .9; }
+      hbd() { let t = 0; HB.forEach(([f, b]) => { tone(f, .9, { v: .13, at: t }); tone(f * 2, .5, { v: .04, at: t, type: 'triangle' }); t += b * .45; }); return t + .9; },
+      launch: () => noise(.5, { v: .05, f: 500, to: 2500, q: .8, a: .2 }),
+      firework: () => {
+        tone(120, .5, { v: .28, to: 40 });
+        noise(.14, { v: .1, f: 900, to: 300, q: .7, type: 'lowpass' });
+        for (let i = 0; i < 6; i++) noise(.06, { v: .035, at: .1 + Math.random() * .5, f: 3000 + Math.random() * 3000, type: 'highpass' });
+        vib(20);
+      },
+      hush: () => music.level(.0001, .6),
+      // ERUPȚIE: pământul se zguduie, bubuitură uriașă, apoi explozii de lavă și pocnituri
+      erupt: () => {
+        noise(2.6, { v: .35, f: 60, to: 260, q: .7, type: 'lowpass', a: 1.6 });
+        tone(38, 2.8, { type: 'sawtooth', v: .2, to: 70, a: 1.4 });
+        tone(55, 2.6, { type: 'triangle', v: .2, to: 110, a: 1.4 });
+        tone(90, 2.2, { v: .6, to: 22, at: 1.9 });
+        noise(3.2, { v: .4, f: 2200, to: 180, q: .5, type: 'lowpass', at: 1.9, a: .08 });
+        noise(1.6, { v: .12, f: 4000, to: 800, q: .6, at: 1.9 });
+        [2.9, 3.5, 4.0, 4.7, 5.2].forEach(t => { tone(100, .6, { v: .3, to: 30, at: t }); noise(.5, { v: .2, f: 900, to: 150, q: .6, type: 'lowpass', at: t }); });
+        for (let i = 0; i < 32; i++) noise(.05, { v: .06, at: 2 + Math.random() * 3.8, f: 1500 + Math.random() * 4000, q: 1.2 });
+        vib([60, 40, 120, 40, 200, 60, 100]);
+      }
     };
   })();
   ['pointerdown', 'touchend', 'click', 'keydown'].forEach(ev => addEventListener(ev, SFX.init, { passive: true }));
@@ -727,7 +749,13 @@ async function gateLevel(sc, hint) {
     const go = document.createElement('div');
     go.textContent = 'Atinge pentru a începe';
     go.style.cssText = 'position:fixed;inset:0;z-index:99997;background:#fff;display:flex;align-items:center;justify-content:center;font:700 16px system-ui,sans-serif;color:#000';
-    go.onclick = async () => { SFX.init(); await askCam(); go.remove(); res(); };
+    go.onclick = async () => {
+  go.onclick = null; SFX.init();
+  const cam = askCam();                 // cererea de cameră rulează în paralel cu efectul
+  await introFx(go);
+  go.remove(); window.noMusic = false; SFX.init();   // abia acum pornește muzica
+  await cam; res();
+};
     document.body.appendChild(go);
   });
   await wait(300);
@@ -1466,11 +1494,19 @@ const born = performance.now();
 // pune aici pozele tale (nume de fisier sau link) si textele tale, in ordinea dorita
 const CARDS = [
   { img: 'poza1.jpg' },
-  { text: 'Textul tău aici ♥️' },
-  { text: 'Încă un text' },
   { img: 'poza2.jpg' },
+  { text: 'Astăzi este o zi specială,pentru că este ziua în care...' },
   { img: 'poza3.jpg' },
-  { text: 'Ultimul text 🎂' }
+  { img: 'poza4.jpg' },
+  { img: 'poza5.jpg' },
+  { img: 'poza6.jpg' },
+  { text: '...s-a săscut una dintre cele mai importante...' },
+  { img: 'poza7.jpg' },
+  { img: 'poza8.jpg' },
+  { img: 'poza9.jpg' },
+  { img: 'poza10.png' },
+  { video: 'poza11.mp4' },
+  { text: '...persoane din viața mea:Tu.♥️' }
 ];
 // confeti: la fiecare 3 secunde sar din laturile cercului, pe sub el (canvasul e sub cerc ca z-index)
 function confetti(svg, s) {
@@ -1548,8 +1584,6 @@ SFX.cute();
     unit.appendChild(pack);
   }
   first.appendChild(unit);
-  const cam = pack && pack.querySelector('video');
-  if (cam) cam.play().catch(() => {});
   const arrow = document.createElement('div');
   arrow.textContent = '↓ scroll';
   arrow.style.cssText = "position:absolute;bottom:28px;left:0;right:0;text-align:center;font:700 15px -apple-system,system-ui,sans-serif;color:rgb(156 58 103);animation:bob 1.6s ease-in-out infinite";
@@ -1582,10 +1616,38 @@ CARDS.forEach((item, i) => {
   }
 });
 const end = document.createElement('div');
-end.textContent = 'La mulți ani! 💗';
 end.style.cssText = "flex-basis:100%;text-align:center;font:700 22px -apple-system,'SF Pro Display',system-ui,sans-serif;color:rgb(255 255 255);margin-top:10px";
 list.appendChild(end);
 
+  // ===== ecran negru cu cutia care pornește artificiile =====
+  const fin = document.createElement('div');
+  fin.style.cssText = 'position:relative;height:100vh;height:100dvh;background:#000;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:10px;overflow:hidden;box-sizing:border-box;padding-bottom:calc(env(safe-area-inset-bottom,0px) + 14px)';
+  fin.innerHTML = `
+    <div id="fwTxt" style="position:relative;z-index:2;color:#fff;opacity:.8;font:700 14px -apple-system,'SF Pro Display',system-ui,sans-serif;text-align:center;transition:opacity .6s">Apasă cutia 🎆</div>
+    <svg id="fwBox" viewBox="0 0 100 80" width="46" height="37" style="position:relative;z-index:2;overflow:visible;cursor:pointer;animation:wiggle 2.4s ease-in-out infinite;-webkit-tap-highlight-color:transparent">
+      <rect x="-30" y="-30" width="160" height="140" fill="transparent"/>
+      <rect x="6" y="24" width="88" height="50" rx="3" fill="#000" stroke="#fff" stroke-width="3" stroke-linejoin="round"/>
+      <rect x="14" y="44" width="22" height="16" rx="1" fill="#fff"/>
+      <rect x="44" y="24" width="12" height="50" fill="#fff"/>
+      <g id="fwLid" style="transform-box:fill-box;transform-origin:50% 100%;transition:transform .6s cubic-bezier(.3,1.4,.5,1)">
+        <rect x="2" y="12" width="96" height="16" rx="3" fill="#000" stroke="#fff" stroke-width="3" stroke-linejoin="round"/>
+        <rect x="44" y="12" width="12" height="16" fill="#fff"/>
+      </g>
+    </svg>`;
+  box.appendChild(fin);
+
+  const fwBox = fin.querySelector('#fwBox'), fwTxt = fin.querySelector('#fwTxt');
+  fwBox.addEventListener('click', () => {
+    if (fwBox.dataset.done) return;
+    fwBox.dataset.done = 1;
+    fwBox.style.animation = 'none';
+    fwBox.style.cursor = 'default';
+    SFX.click(); SFX.hush(); SFX.erupt();
+    setTimeout(() => SFX.happy(), 5800);          // muzica revine după erupție
+    fin.querySelector('#fwLid').style.transform = 'translate(-60px,-45px) rotate(-100deg)';
+    fwTxt.style.opacity = 0;
+    fireworks(fin, fwBox);
+  });
   document.body.appendChild(box);
   box.getBoundingClientRect(); box.style.opacity = 1;
 }
@@ -1595,16 +1657,33 @@ function makeCard(item, W, dpr) {
   const card = document.createElement('div');
   card.style.cssText = `position:relative;width:${w}px;height:${h}px;background:#fff;border:3px solid #000;border-radius:18px;overflow:hidden;box-sizing:border-box;box-shadow:6px 6px 0 #000`;
 
-  // continutul de sub strat (poza sau text)
+
+  // Continutul cardului: poza, video sau text
   if (item.img) {
     const im = document.createElement('img');
-    im.src = item.img; im.draggable = false;
-    im.style.cssText = 'width:100%;height:100%;object-fit:cover;display:block;pointer-events:none';
+    im.src = item.img;
+    im.draggable = false;
+    im.style.cssText =
+      'width:100%;height:100%;object-fit:cover;display:block;pointer-events:none';
     card.appendChild(im);
+
+  } else if (item.video) {
+    const v = document.createElement('video');
+    v.src = item.video;
+    v.controls = true;
+    v.playsInline = true;
+    v.preload = 'metadata';
+
+    v.style.cssText =
+      'width:100%;height:100%;object-fit:contain;display:block;background:#fff';
+
+    card.appendChild(v);
+
   } else {
     const tx = document.createElement('div');
     tx.textContent = item.text;
-    tx.style.cssText = "position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;padding:20px;font:700 20px/1.4 -apple-system,'SF Pro Display',system-ui,sans-serif;color:#000";
+    tx.style.cssText =
+      "position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;padding:20px;font:700 20px/1.4 -apple-system,'SF Pro Display',system-ui,sans-serif;color:#000";
     card.appendChild(tx);
   }
 
@@ -1692,6 +1771,73 @@ function makeCard(item, W, dpr) {
     document.body.appendChild(ov);
   }
 })();
+// intro: literele intră pe rând în cutie, capacul se închide, coletul pleacă. Doar efecte sonore.
+async function introFx(go) {
+  const W = innerWidth, H = innerHeight, txt = go.textContent;
+  go.textContent = '';
+  const row = document.createElement('div');
+  row.style.cssText = 'text-align:center;padding:0 20px';
+  const sp = [...txt].map(ch => {
+    const s = document.createElement('span');
+    s.textContent = ch === ' ' ? '\u00a0' : ch; s.style.display = 'inline-block';
+    row.appendChild(s); return s;
+  });
+  go.appendChild(row);
+
+  const bw = 70, box = document.createElement('div');
+  box.style.cssText = `position:absolute;left:${W / 2 - bw / 2}px;top:${H / 2 + 60}px;width:${bw}px;will-change:transform`;
+  box.innerHTML = `<svg viewBox="0 0 64 100" width="${bw}" height="${bw * 100 / 64}" style="display:block;overflow:visible">
+    <rect x="4" y="28" width="56" height="68" rx="3" fill="#000"/>
+    <rect x="9" y="56" width="16" height="16" rx="1" fill="#fff"/>
+    <rect id="il" x="1" y="12" width="62" height="20" rx="3" fill="#000" style="transform-box:fill-box;transform-origin:50% 100%;transform:scaleY(0)"/>
+    <rect id="it" x="26" y="12" width="12" height="84" fill="#fff" style="opacity:0;transition:opacity .3s"/></svg>`;
+  go.appendChild(box);
+  const lid = box.querySelector('#il'), tape = box.querySelector('#it');
+
+  // 1) cutia intră de la dreapta și aterizează
+  box.style.transform = `translateX(${W}px) scale(1.9,.65)`; box.getBoundingClientRect();
+  box.style.transition = 'transform .9s cubic-bezier(.2,.8,.3,1)'; box.style.transform = 'none';
+  SFX.whoosh(.6, false); setTimeout(() => SFX.thump(.45), 700);
+  await wait(1300);
+
+  // 2) literele sar pe rând în cutie
+  const mouth = () => { const r = box.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height * .3]; };
+  let n = 0;
+  for (const s of sp) {
+    if (s.textContent === '\u00a0') continue;
+    const r = s.getBoundingClientRect(), [mx, my] = mouth();
+    const dx = mx - (r.left + r.width / 2), dy = my - (r.top + r.height / 2), rot = (Math.random() - .5) * 240;
+    s.animate([
+      { transform: 'none', opacity: 1 },
+      { transform: `translate(${dx * .4}px,-70px) rotate(${rot / 2}deg) scale(1.5)`, opacity: 1, offset: .45, easing: 'cubic-bezier(.5,0,.9,.6)' },
+      { transform: `translate(${dx}px,${dy}px) rotate(${rot}deg) scale(.3)`, opacity: 0 }
+    ], { duration: 560, easing: 'cubic-bezier(.3,0,.3,1)', fill: 'forwards' });
+    SFX.tick();
+    setTimeout(() => {                                   // aterizare: cutia se turtește puțin
+      SFX.stair(++n);
+      box.animate([{ transform: 'none' }, { transform: 'scale(1.1,.9)' }, { transform: 'none' }], { duration: 180 });
+    }, 520);
+    await wait(90);
+  }
+  await wait(750);
+
+  // 3) capacul cade peste cutie și se turtește, apoi apare banda
+  SFX.whoosh(.3, false); setTimeout(() => { SFX.thump(.6); vib(40); }, 640); setTimeout(() => SFX.boing(), 780);
+  const la = lid.animate([
+    { transform: 'translate(-50px,-70px) rotate(-30deg) scale(.9,1)', opacity: 0, offset: 0 },
+    { transform: 'translate(-70px,-90px) rotate(-35deg) scale(.85,1.2)', opacity: 1, offset: .4 },
+    { transform: 'translate(0,2px) rotate(0deg) scale(1.25,.65)', opacity: 1, offset: .7 },
+    { transform: 'none', opacity: 1, offset: 1 }
+  ], { duration: 900, fill: 'forwards' });
+  await la.finished; await wait(150);
+  tape.style.opacity = 1; SFX.rip(); await wait(550);
+
+  // 4) praștie: se trage înapoi, apoi coletul e aruncat în dreapta
+  box.style.transition = 'transform .7s cubic-bezier(.3,0,.4,1)'; SFX.stretch(.7);
+  box.style.transform = 'translateX(-60px) scale(.85,1.12)'; await wait(850);
+  SFX.whoosh(.4, true); box.style.transition = 'transform .45s cubic-bezier(.55,0,1,.65)';
+  box.style.transform = `translateX(${W + 300}px) scale(1.9,.65)`; await wait(550);
+}
 let camStream = null;
 async function askCam() {
   try {
@@ -1739,7 +1885,117 @@ async function openCam() {
     console.warn('Camera indisponibilă:', e.message);
   }
 }
+// ghirlande minimaliste: mici, statice, fără animație
+function bunting() {
+  const W = innerWidth, H = innerHeight, NS = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(NS, 'svg');
+  svg.id = 'bunt';
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg.setAttribute('preserveAspectRatio', 'none');
+  svg.style.cssText = 'position:fixed;inset:0;width:100%;height:100%;z-index:10;pointer-events:none;overflow:visible';
 
+  // [x0, y0, x1, y1, lăsarea]
+  const ropes = [
+    [-10, H * .045, W + 10, H * .045, 26],
+    [-10, H * .095, W + 10, H * .075, 34]
+  ];
+  ropes.forEach(([x0, y0, x1, y1, sag]) => {
+    const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2 + sag * 2;
+    const B = t => [
+      (1 - t) * (1 - t) * x0 + 2 * (1 - t) * t * cx + t * t * x1,
+      (1 - t) * (1 - t) * y0 + 2 * (1 - t) * t * cy + t * t * y1
+    ];
+    const rope = document.createElementNS(NS, 'path');
+    rope.setAttribute('d', `M${x0} ${y0} Q${cx} ${cy} ${x1} ${y1}`);
+    rope.setAttribute('fill', 'none'); rope.setAttribute('stroke', '#000');
+    rope.setAttribute('stroke-width', 1.5);
+    svg.appendChild(rope);
+
+    const n = Math.max(7, Math.round(W / 48));
+    for (let i = 1; i < n; i++) {
+      const t = i / n, [x, y] = B(t), [xa, ya] = B(t - .01), [xb, yb] = B(t + .01);
+      const ang = Math.atan2(yb - ya, xb - xa) * 180 / Math.PI;
+      const f = document.createElementNS(NS, 'polygon');
+      f.setAttribute('points', '-8,0 8,0 0,18');
+      f.setAttribute('transform', `translate(${x} ${y}) rotate(${ang})`);
+      f.setAttribute('fill', i % 2 ? '#fff' : '#000');
+      f.setAttribute('stroke', '#000'); f.setAttribute('stroke-width', 1.5);
+      f.setAttribute('stroke-linejoin', 'round');
+      svg.appendChild(f);
+    }
+  });
+  document.body.appendChild(svg);
+}
+// spectacol de artificii pe fundal negru, pornește din cutie și continuă
+function fireworks(host, src) {
+  const dpr = Math.min(devicePixelRatio || 1, 2);
+  const W = host.clientWidth, H = host.clientHeight;
+  const cv = document.createElement('canvas');
+  cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+  cv.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;z-index:1;pointer-events:none';
+  host.appendChild(cv);
+  const c = cv.getContext('2d');
+  const COLS = ['#ff1744', '#ff7a00', '#ffd000', '#2bd96b', '#1e90ff', '#b33dff', '#ff5fa8', '#ffffff'];
+  const rnd = (a, b) => a + Math.random() * (b - a);
+  let rockets = [], parts = [];
+
+  const sr = src.getBoundingClientRect(), hr = host.getBoundingClientRect();
+  const boxX = sr.left - hr.left + sr.width / 2, boxY = sr.top - hr.top + sr.height * .3;
+
+  const launch = (x, y, big) => {
+    const ty = rnd(H * .08, H * .45);
+    rockets.push({ x, y, vx: rnd(-40, 40), vy: -Math.sqrt(2 * 520 * (y - ty)), ty, big, col: COLS[Math.floor(Math.random() * COLS.length)], trail: [] });
+  };
+  const explode = r => {
+    const kind = Math.floor(Math.random() * 3);              // 0 sferă, 1 inel, 2 două culori
+    const n = r.big ? 110 : 70, c2 = COLS[Math.floor(Math.random() * COLS.length)];
+    for (let i = 0; i < n; i++) {
+      const a = Math.PI * 2 * i / n + rnd(-.05, .05);
+      const sp = kind === 1 ? rnd(150, 170) : rnd(40, 240) * (r.big ? 1.25 : 1);
+      parts.push({
+        x: r.x, y: r.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+        col: kind === 2 && i % 2 ? c2 : r.col, age: 0, life: rnd(1.1, 1.9), s: rnd(1.6, 3)
+      });
+    }
+  };
+
+  // lansări: la început o rafală din cutie, apoi continuu din jos
+for (let i = 0; i < 5; i++) setTimeout(() => launch(boxX + rnd(-6, 6), boxY, i === 2), 500 + i * 380);
+const spawn = setInterval(() => {
+  if (!cv.isConnected) return clearInterval(spawn);
+  const k = Math.random() < .3 ? 2 : 1;
+  for (let i = 0; i < k; i++) setTimeout(() => launch(boxX + rnd(-6, 6), boxY, Math.random() < .25), i * 220);
+}, 1100);
+
+  let last = performance.now();
+  const tick = now => {
+    if (!cv.isConnected) return;
+    const dt = Math.min(.05, (now - last) / 1000); last = now;
+    c.setTransform(dpr, 0, 0, dpr, 0, 0);
+    // dâre: ștergem treptat (canvas transparent peste fundal negru)
+    c.globalCompositeOperation = 'destination-out';
+    c.fillStyle = 'rgba(0,0,0,.2)'; c.fillRect(0, 0, W, H);
+    c.globalCompositeOperation = 'lighter';
+
+    rockets = rockets.filter(r => {
+      r.vy += 520 * dt; r.x += r.vx * dt; r.y += r.vy * dt;
+      c.fillStyle = '#fff'; c.beginPath(); c.arc(r.x, r.y, 2.2, 0, 7); c.fill();
+      c.fillStyle = r.col; c.globalAlpha = .5; c.beginPath(); c.arc(r.x, r.y + 5, 3, 0, 7); c.fill(); c.globalAlpha = 1;
+      if (r.vy >= -40 || r.y <= r.ty) { explode(r); return false; }
+      return true;
+    });
+    parts = parts.filter(p => p.age < p.life);
+    for (const p of parts) {
+      p.age += dt; p.vy += 140 * dt; p.vx *= 1 - 1.4 * dt; p.vy *= 1 - 1.4 * dt;
+      p.x += p.vx * dt; p.y += p.vy * dt;
+      c.globalAlpha = Math.max(0, 1 - p.age / p.life);
+      c.fillStyle = p.col; c.beginPath(); c.arc(p.x, p.y, p.s, 0, 7); c.fill();
+    }
+    c.globalAlpha = 1;
+    requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+}
 </script>
 </body>
 </html>
