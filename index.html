@@ -750,7 +750,7 @@ async function gateLevel(sc, hint) {
 
   // ---- replica ----
   await say(hint, 'Tu', '— Oooo,|NU!!|Cum|mai|ajung|eu|dacă|poarta|e|închisă...?|Mmmh...|am|o|idee,|voi|sări|gardul!', 150);
-  await wait(2500);
+  await wait(4000);
 
   // ---- 12 atingeri: 1 agatare, 10 urcare, 1 salt ----
   const N = 10, climbTotal = fh * .86, bottomAt = n => gy - (n / N) * climbTotal;
@@ -788,8 +788,62 @@ async function gateLevel(sc, hint) {
   ], { duration: 900, easing: 'cubic-bezier(.3,0,.5,1)', fill: 'forwards' });
   setTimeout(() => man.classList.add('behind'), 380);
   await a.finished; if (a.commitStyles) a.commitStyles(); a.cancel();
-  place(x1, b1, s1); pose('stand'); SFX.thump(.5); vib([30, 20, 30]);
-  await wait(500);
+  place(x1, b1, s1); pose('stand'); SFX.thump(.7); SFX.crash(); vib([40, 20, 70]);
+
+  // ---- impact: scutură ecranul, omulețul se turtește, se ridică praf ----
+  sc.animate([
+    { transform: 'translate(0,0)' },
+    { transform: 'translate(6px,-8px)' },
+    { transform: 'translate(-6px,5px)' },
+    { transform: 'translate(4px,-3px)' },
+    { transform: 'translate(-2px,2px)' },
+    { transform: 'translate(0,0)' }
+  ], { duration: 380, easing: 'ease-out' });
+
+  man.animate([
+    { transform: `scale(${s1})` },
+    { transform: `scale(${s1 * 1.25},${s1 * .6})`, offset: .25 },
+    { transform: `scale(${s1 * .92},${s1 * 1.08})`, offset: .6 },
+    { transform: `scale(${s1})` }
+  ], { duration: 450, easing: 'ease-out' });
+
+  const rn = (p, q) => p + Math.random() * (q - p);
+  for (let i = 0; i < 14; i++) {
+    const side = i % 2 ? 1 : -1, sz = rn(12, 30);
+    const px = x1 + rn(-14, 14), py = b1 - sz / 2;
+    const d = document.createElement('div');
+    d.style.cssText = `position:absolute;z-index:6;left:${px - sz / 2}px;top:${py - sz / 2}px;width:${sz}px;height:${sz}px;`
+      + 'border-radius:50%;background:#515151;pointer-events:none';
+    backW.appendChild(d);
+
+  // Particulele mari de praf
+  d.animate([
+    { transform: 'translate(0,0) scale(.4)', opacity: 1 },
+    {
+      transform: `translate(${rn(-60, 60)}px,${-rn(fh + 30, fh + 100)}px) scale(${rn(1.4, 2.1)})`,
+      opacity: 0
+    }
+  ], {
+    duration: rn(700, 1100),
+    easing: 'cubic-bezier(.1,.7,.3,1)',
+    fill: 'forwards'
+  }).onfinish = () => d.remove();
+  }
+  // puncte mici de praf
+  for (let i = 0; i < 10; i++) {
+    const sz = rn(3, 6), d = document.createElement('div');
+    d.style.cssText = `position:absolute;z-index:6;left:${x1 + rn(-16, 16)}px;top:${b1 - 6}px;width:${sz}px;height:${sz}px;border-radius:50%;background:#000;pointer-events:none`;
+    backW.appendChild(d);
+    d.animate([
+      { transform: 'translate(0,0)', opacity: 1 },
+      { transform: `translate(${rn(-60, 60)}px,${-rn(fh + 30, fh + 200)}px)`, opacity: 0 }
+    ], { duration: rn(500, 900), easing: 'ease-out', fill: 'forwards' }).onfinish = () => d.remove();
+  }
+
+  await wait(600);
+  await say(hint, 'Tu', '— Aaau,|spatele...', 220);
+  await wait(1800);
+  hint.innerHTML = '';
 
   // ---- se ridica si merge in dreptul portii ----
   const gx = gcx - 35;                                   // putin in stanga portii, ca sa se vada poarta
@@ -810,7 +864,7 @@ async function gateLevel(sc, hint) {
   // ---- coletul a ramas de partea cealalta ----
   parcel.animate([{ transform: 'rotate(0)' }, { transform: 'rotate(-10deg)' }, { transform: 'rotate(8deg)' }, { transform: 'rotate(-6deg)' }, { transform: 'rotate(0)' }], { duration: 700, iterations: 3 });
   SFX.no();
-  await say(hint, 'Bob Blup', '— Ahh,Coletuu|!!🥲😫', 280);
+  await say(hint, 'Tu', '— Ahh,Coletuu|!!🥲😫', 280);
   await wait(2000);
 
   // ---- iesire: totul se stinge si se sterge, apoi urmeaza cladirea ----
@@ -839,12 +893,12 @@ async function intercom(sc, hint) {
   let paper = null;
   const SHEET = 'Pentru a desluși codul interfonului ai nevoie de 3 mini pliculețe care sunt ascunse peste tot în cadourile tale. Ele vor avea niște cuvinte în ele care te vor ajuta la descifrarea parolei. Mult succes la căutare!!!😅';
   (async () => {
-    await say(hint, 'Bob Blup', '— Oo|nuu,|și|cum|mai|ajung|la|ea?', 140, true);
+    await say(hint, 'Bob Blup', '— Ooo|nuu,|și|cum|mai|ajungi|la|ea?', 140, true);
     if (icClosed) return;
-    await wait(500);
-    await say(hint, 'Tu', '— Oo,|cred|că|am|găsit|ceva!!', 140, true);
+    await wait(1200);
+    await say(hint, 'Tu', '— Stai,|cred|că|am|găsit|ceva!', 140, true);
     if (icClosed) return;
-    await wait(300);
+    await wait(1200);
     if (icClosed) return;
     const pw = pad.offsetWidth, ph = pad.offsetHeight;
     const rl = pad.offsetLeft - pw / 2, rt = pad.offsetTop - ph / 2;
@@ -1255,7 +1309,7 @@ if (S <= 4) {
     ], { duration: 320 });
     await wait(500);
     await wait(show('Ușa|este|încuiată...|Folosește|interfonul!', 150, hint));
-    await wait(600);
+    await wait(1200);
     await intercom(sc, hint);
     SFX.click(); SFX.creak(); bd.querySelector('.bl.r').style.transform = 'rotateY(-105deg)'; await wait(1100);
 
