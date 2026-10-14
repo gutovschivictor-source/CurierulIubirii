@@ -188,6 +188,30 @@
 })();
   const t = document.getElementById('txt');
   const wait = ms => new Promise(r => setTimeout(r, ms));
+const fade = (() => {
+  let el = null, on = false;
+  const mk = () => {
+    if (el) return;
+    el = document.createElement('div');
+    el.style.cssText = 'position:fixed;inset:0;z-index:60;opacity:0;pointer-events:none';
+    document.body.appendChild(el);
+  };
+  return {
+    async to(col = '#fff', ms = 600) {
+      mk(); on = true;
+      el.style.background = col; el.style.pointerEvents = 'auto';
+      el.style.transition = `opacity ${ms}ms ease`;
+      el.getBoundingClientRect(); el.style.opacity = 1;
+      await wait(ms + 50);
+    },
+    async from(ms = 600) {
+      if (!on) return;
+      el.style.transition = `opacity ${ms}ms ease`; el.style.opacity = 0;
+      await wait(ms + 50);
+      el.style.pointerEvents = 'none'; on = false;
+    }
+  };
+})();
 // fără muzică de fundal în intro (în modul cu butonul de nivele, muzica merge ca înainte)
 window.noMusic = !(+location.hash.slice(1) && innerWidth > 700);
 
@@ -467,7 +491,7 @@ no.onclick = () => {
       cv.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;opacity:0;transition:opacity 1.2s ease-out;pointer-events:auto;touch-action:none';
       sc.appendChild(cv);
       const c = cv.getContext('2d');
-      const N = 32, LANES = 4, Rw = Math.min(W * .9, 340), rx = (W - Rw) / 2, lane = Rw / LANES;
+      const N = 32, LANES = 4, Rw = Math.min(W * .74, 300), rx = (W - Rw) / 2, lane = Rw / LANES;
       const cw = Math.min(lane * .6, 46), ch = cw * 1.9, SP = ch * 3.4, V = 460;
       const pyT = H * .78, Tin = Math.sqrt(2 * (H + ch - pyT) / 420);
       let py = H + ch, fin = 0, vy = 0, fading = false, introT = 0;
@@ -564,6 +588,78 @@ no.onclick = () => {
         else tractor(k.x, k.y, k.w, k.l);
         c.restore();
       };
+      // ===== DETALII PE MARGINEA DRUMULUI: borduri, trotuare, iarbă, copaci, felinare =====
+      const hsh = n => { const s = Math.sin(n * 127.1 + 311.7) * 43758.5453; return s - Math.floor(s); };
+      const CB = 7, SW = Math.max(12, Math.min(20, rx * .38));
+      const roadside = () => {
+        for (const dir of [-1, 1]) {
+          const ex = dir < 0 ? rx : rx + Rw;       // marginea drumului
+          const x1 = ex + dir * CB;                // marginea exterioară a bordurii
+          const x2 = x1 + dir * SW;                // marginea exterioară a trotuarului
+          const sid = dir < 0 ? 0 : 1;
+          c.lineCap = 'butt'; c.strokeStyle = '#000'; c.fillStyle = '#000';
+
+          // bordura: blocuri negre alternative, se mișcă odată cu drumul
+          const o1 = scroll % 36;
+          for (let y = o1 - 36; y < H; y += 36) c.fillRect(Math.min(ex, x1), y, CB, 18);
+          c.lineWidth = 3; c.beginPath(); c.moveTo(x1, 0); c.lineTo(x1, H); c.stroke();
+
+          // trotuarul: rosturi între dale + marginea exterioară
+          const o2 = scroll % 28;
+          c.lineWidth = 1.5; c.beginPath();
+          for (let y = o2 - 28; y < H; y += 28) { c.moveTo(x1, y); c.lineTo(x2, y); }
+          c.stroke();
+          c.lineWidth = 2.5; c.beginPath(); c.moveTo(x2, 0); c.lineTo(x2, H); c.stroke();
+
+          // fire de iarbă în spatele copacilor
+          const a0 = dir < 0 ? 4 : x2 + 6, a1 = dir < 0 ? x2 - 6 : W - 4;
+          if (a1 - a0 > 10) {
+            const T0 = 38, b0 = Math.floor(scroll / T0), os0 = scroll % T0;
+            c.lineWidth = 1.5; c.lineCap = 'round'; c.beginPath();
+            for (let j = -1; j * T0 < H + T0; j++) {
+              const k = j - b0;
+              const x = a0 + hsh(k * 3 + sid) * (a1 - a0), y = j * T0 + os0 + hsh(k * 3 + sid + .5) * 20;
+              c.moveTo(x - 4, y); c.lineTo(x - 1, y - 5);
+              c.moveTo(x, y); c.lineTo(x, y - 7);
+              c.moveTo(x + 4, y); c.lineTo(x + 1, y - 5);
+            }
+            c.stroke();
+          }
+
+          // copaci (văzuți de sus): coroană ondulată, alb cu contur
+          const S = 96, b1 = Math.floor(scroll / S), os1 = scroll % S;
+          for (let j = -1; j * S < H + S; j++) {
+            const k = j - b1, h1 = hsh(k * 7 + sid * 3 + 1), h2 = hsh(k * 7 + sid * 3 + 2);
+            if (h1 < .12) continue;                                   // mai rar, câte un loc gol
+            const r = 12 + h2 * 6, cx = x2 + dir * 8, cy = j * S + os1 + (h1 - .5) * 30;
+            c.lineWidth = 2.5; c.lineCap = 'butt'; c.fillStyle = '#fff'; c.strokeStyle = '#000';
+            for (let a = 0; a < 8; a++) {
+              const an = a * Math.PI / 4 + h2 * 3;
+              c.beginPath(); c.arc(cx + Math.cos(an) * r * .62, cy + Math.sin(an) * r * .62, r * .42, 0, 7); c.fill(); c.stroke();
+            }
+            c.beginPath(); c.arc(cx, cy, r * .72, 0, 7); c.fill();    // acoperă conturile dinăuntru
+            c.lineWidth = 1.5; c.lineCap = 'round'; c.beginPath();
+            for (let a = 0; a < 3; a++) {
+              const an = h1 * 6 + a * 2.1;
+              c.moveTo(cx + Math.cos(an) * 4, cy + Math.sin(an) * 4);
+              c.lineTo(cx + Math.cos(an) * r * .5, cy + Math.sin(an) * r * .5);
+            }
+            c.stroke();
+            c.fillStyle = '#000'; c.beginPath(); c.arc(cx, cy, 2.5, 0, 7); c.fill();   // trunchiul
+          }
+
+          // felinare (văzute de sus): stâlp + braț spre drum
+          const S2 = 192, b2 = Math.floor(scroll / S2), os2 = scroll % S2;
+          for (let j = -1; j * S2 < H + S2; j++) {
+            const y = j * S2 + os2 + 48 + sid * 96, lx = x1 + dir * 5;
+            c.strokeStyle = '#000'; c.lineWidth = 2.5; c.lineCap = 'round';
+            c.beginPath(); c.moveTo(lx, y); c.lineTo(lx - dir * 9, y); c.stroke();
+            c.fillStyle = '#000'; c.beginPath(); c.arc(lx - dir * 9, y, 3.5, 0, 7); c.fill();
+            c.fillStyle = '#fff'; c.lineWidth = 2; c.beginPath(); c.arc(lx, y, 3, 0, 7); c.fill(); c.stroke();
+          }
+        }
+        c.lineCap = 'butt'; c.strokeStyle = '#000';
+      };
       const draw = () => {
         c.setTransform(dpr, 0, 0, dpr, 0, 0);
         c.fillStyle = '#fff'; c.fillRect(0, 0, W, H);
@@ -572,6 +668,8 @@ no.onclick = () => {
         c.lineWidth = 3; c.setLineDash([28, 28]); c.lineDashOffset = -scroll;
         c.beginPath(); for (let i = 1; i < LANES; i++) { c.moveTo(rx + lane * i, 0); c.lineTo(rx + lane * i, H); } c.stroke();
         c.setLineDash([]);
+        roadside();
+        for (const k of cars) if (k.y > -k.l && k.y < H + k.l) veh(k);
         for (const k of cars) if (k.y > -k.l && k.y < H + k.l) veh(k);
         car(px, py, -1, true);
         if (flash > 0) { c.fillStyle = `rgba(0,0,0,${flash * .6})`; c.fillRect(0, 0, W, H); }
@@ -638,6 +736,64 @@ function knockFx(d, n = 1) {
   }
 
 }
+// ===== INIMIOARE ASCUNSE (3 mici cutii; nu schimbă povestea) =====
+// Cutiile sunt copii ai elementelor din scenă, deci se mișcă odată cu ele (tremur, zoom). Atingerea se detectează după poziția lor reală.
+const HEARTS = (() => {
+  const found = new Set(); let guard = 0;
+  if (!document.getElementById('hbStyle')) {
+    const st = document.createElement('style'); st.id = 'hbStyle';
+    st.textContent = `
+      .hb-box{position:absolute;z-index:30;width:15px;height:11px;box-sizing:border-box;background:#000;border:1.5px solid rgba(255,255,255,.5);border-radius:2px;opacity:.55;pointer-events:none;animation:hbTw 5s ease-in-out 25s infinite}
+      .hb-box.l{background:#fff;border-color:rgba(0,0,0,.55)}
+      .hb-box::before{content:"";position:absolute;left:0;right:0;top:3px;height:1px;background:rgba(255,255,255,.5)}
+      .hb-box.l::before{background:rgba(0,0,0,.5)}
+      @keyframes hbTw{0%,75%,100%{opacity:.55}88%{opacity:.95}}
+      .hb-heart{position:fixed;z-index:95;pointer-events:none;font-size:22px;line-height:1;color:#ff3b5c}
+      .hb-count{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom,0px) + 22px);transform:translateX(-50%);z-index:95;pointer-events:none;background:#000;color:#fff;border-radius:999px;padding:9px 16px;font:700 14px/1 -apple-system,system-ui,sans-serif;opacity:0;transition:opacity .35s}
+    `;
+    document.head.appendChild(st);
+  }
+  const clear = () => document.querySelectorAll('.hb-box').forEach(b => b.remove());
+  const toast = () => {
+    let c = document.querySelector('.hb-count');
+    if (!c) { c = document.createElement('div'); c.className = 'hb-count'; document.body.appendChild(c); }
+    c.textContent = found.size >= 3 ? '❤ ❤ ❤  Le-ai găsit pe toate!' : '❤ ' + found.size + ' / 3';
+    c.getBoundingClientRect(); c.style.opacity = 1;
+    clearTimeout(c._t); c._t = setTimeout(() => c.style.opacity = 0, found.size >= 3 ? 3600 : 2000);
+  };
+  const open = (id, b) => {
+    if (found.has(id)) return; found.add(id);
+    const r = b.getBoundingClientRect();
+    try { SFX.pop(); } catch (e) {}
+    const h = document.createElement('div'); h.className = 'hb-heart'; h.textContent = '❤';
+    h.style.left = (r.left + r.width / 2 - 11) + 'px'; h.style.top = (r.top - 4) + 'px';
+    document.body.appendChild(h);
+    h.animate([{ transform: 'translateY(0) scale(.3)', opacity: 0 }, { transform: 'translateY(-34px) scale(2.2)', opacity: 1, offset: .35 }, { transform: 'translateY(-90px) scale(1.6)', opacity: 0 }], { duration: 1400, easing: 'ease-out' }).onfinish = () => h.remove();
+    b.animate([{ transform: 'scale(1)' }, { transform: 'scale(1.6)' }, { transform: 'scale(0)', opacity: 0 }], { duration: 420, fill: 'forwards' }).onfinish = () => b.remove();
+    toast();
+  };
+  // detectie dupa pozitia reala (urmareste tremurul/zoom-ul scenei); faza de captura = inaintea jocului
+  addEventListener('pointerdown', e => {
+    for (const b of document.querySelectorAll('.hb-box')) {
+      if (b.dataset.on) continue;
+      const r = b.getBoundingClientRect(), m = 10;
+      if (!r.width) continue;
+      if (e.clientX >= r.left - m && e.clientX <= r.right + m && e.clientY >= r.top - m && e.clientY <= r.bottom + m) {
+        e.stopImmediatePropagation(); e.preventDefault(); guard = performance.now();
+        b.dataset.on = 1; open(+b.dataset.id, b); return;
+      }
+    }
+  }, true);
+  addEventListener('click', e => { if (performance.now() - guard < 700) { e.stopImmediatePropagation(); e.preventDefault(); } }, true);
+  const place = (id, o) => {
+    if (found.has(id)) return; clear();
+    const b = document.createElement('div'); b.className = 'hb-box' + (o.light ? ' l' : ''); b.dataset.id = id;
+    b.style.left = o.x + 'px'; b.style.top = o.y + 'px';
+    o.in.appendChild(b);
+  };
+  return { place, clear, toast, count: () => found.size };
+})();
+
 // ===== NIVEL: poarta bisericii (sari peste gard) =====
 // Lipește funcția asta în <script>, lângă funcția drive(). Folosește SFX, show, wait și vib din jocul tău.
 async function gateLevel(sc, hint) {
@@ -657,6 +813,14 @@ async function gateLevel(sc, hint) {
       .gt-parcel{position:absolute;z-index:4;width:40px;height:26px;opacity:0;transition:opacity .4s;pointer-events:none;transform-origin:50% 100%}
       .gt-parcel svg{display:block;width:100%;height:100%;overflow:visible}
       .gt-tap{position:absolute;inset:0;z-index:5;pointer-events:auto;touch-action:none;-webkit-tap-highlight-color:transparent}
+.gt-bird{position:absolute;width:34px;pointer-events:none;z-index:7}
+.gt-cat{position:absolute;width:34px;pointer-events:none;z-index:7;transform-origin:50% 100%}
+.gt-bird svg,.gt-cat svg{position:static;width:100%;height:auto;display:block;overflow:visible}
+.gt-wing{transform-box:fill-box;transform-origin:50% 100%}
+.gt-bird.fly .gt-wing{animation:gtFlap .12s linear infinite alternate}
+@keyframes gtFlap{from{transform:scaleY(.3)}to{transform:scaleY(1.7)}}
+.gt-tail{transform-box:fill-box;transform-origin:0 100%;animation:gtTail 2.6s ease-in-out infinite}
+@keyframes gtTail{0%,100%{transform:rotate(0)}50%{transform:rotate(14deg)}}
     `;
     document.head.appendChild(st);
   }
@@ -696,6 +860,7 @@ async function gateLevel(sc, hint) {
     R(front, a - 3, top - 10, b - a + 6, 12, '#000', 2, '#fff');
   };
   fence(-10, gl - pw); fence(gr + pw, W + 10);
+  HEARTS.place(1, { in: frontW, x: wallR * .42, y: top + rh * 2.45 });   // inimioara 1: ascunsă în zid, în stratul care se mișcă
   // stalpi cu bila + doua canaturi cu bare groase + lacat in forma de inima
   for (const x of [gl - pw, gr]) { R(front, x, top - 24, pw, fh + 24, '#000', 3); C(front, x + pw / 2, top - 32, 10, '#000', 2.5, '#fff'); }
   for (const [a, b] of [[gl, gcx], [gcx, gr]]) {
@@ -703,8 +868,90 @@ async function gateLevel(sc, hint) {
     for (let i = 1; i <= 3; i++) { const x = a + (b - a) * i / 4; L(front, x, top + 10, x, gy, 5); C(front, x, top + 6, 5, '#fff', 3); }
   }
   L(front, gcx, top, gcx, gy, 3);
-  const hy = top + fh * .5;
-  Pth(front, `M${gcx} ${hy + 16} C${gcx - 17} ${hy + 2} ${gcx - 9} ${hy - 10} ${gcx} ${hy - 2} C${gcx + 9} ${hy - 10} ${gcx + 17} ${hy + 2} ${gcx} ${hy + 16} Z`, '#000', 2);
+const hy = top + fh * .5;
+Pth(front, `M${gcx} ${hy + 16} C${gcx - 17} ${hy + 2} ${gcx - 9} ${hy - 10} ${gcx} ${hy - 2} C${gcx + 9} ${hy - 10} ${gcx + 17} ${hy + 2} ${gcx} ${hy + 16} Z`, '#000', 2);
+HEARTS.place(1, { in: frontW, light: true, x: gcx - 7.5, y: hy - 1.5 });   // inimioara 1: ascunsă în lacătul-inimă al porții
+  // ===== DECOR ZID: iederă, mușchi, iarbă, flori, pietricele, ramuri, bordură, porumbei, pisică =====
+  const rd = (a, b) => a + Math.random() * (b - a);
+  const dbl = (p, d, w) => {                       // linie albă cu contur negru (se vede și pe zidul negru, și pe cer)
+    mk('path', { d, fill: 'none', stroke: '#000', 'stroke-width': w + 3.5, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, p);
+    mk('path', { d, fill: 'none', stroke: '#fff', 'stroke-width': w, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, p);
+  };
+  const crown = (p, cx, cy, r) => {                // aceeași coroană ondulată ca la copacii din nivelul cu mașina
+    for (let a = 0; a < 8; a++) { const an = a * Math.PI / 4 + .4; C(p, cx + Math.cos(an) * r * .62, cy + Math.sin(an) * r * .62, r * .42, '#fff', 2.5); }
+    C(p, cx, cy, r * .72, '#fff', 0);
+    for (let a = 0; a < 3; a++) { const an = a * 2.1 + 1; L(p, cx + Math.cos(an) * 4, cy + Math.sin(an) * 4, cx + Math.cos(an) * r * .5, cy + Math.sin(an) * r * .5, 1.5); }
+    C(p, cx, cy, 2.5, '#000', 0);
+  };
+  const tuft = (p, x, y, s = 1) => mk('path', { d: `M${x - 6 * s} ${y} L${x - 8 * s} ${y - 9 * s} L${x - 3 * s} ${y - 4 * s} L${x} ${y - 13 * s} L${x + 3 * s} ${y - 4 * s} L${x + 8 * s} ${y - 10 * s} L${x + 6 * s} ${y} Z`, fill: '#fff', stroke: '#000', 'stroke-width': 1.8, 'stroke-linejoin': 'round' }, p);
+  const flower = (p, x, y, h) => {
+    dbl(p, `M${x} ${y} L${x} ${y - h}`, 2);
+    for (let a = 0; a < 5; a++) { const an = a * Math.PI * 2 / 5; C(p, x + Math.cos(an) * 4.2, y - h + Math.sin(an) * 4.2, 3, '#fff', 1.5); }
+    C(p, x, y - h, 2.4, '#000', 1, '#fff');
+  };
+  const pebble = (p, x, y, s = 1) => mk('ellipse', { cx: x, cy: y - 3 * s, rx: 5 * s, ry: 3.4 * s, fill: '#fff', stroke: '#000', 'stroke-width': 1.8 }, p);
+  const moss = (x, r) => mk('path', { d: `M${x - r} ${gy} a${r} ${r * .8} 0 0 1 ${r * 2} 0 Z`, fill: '#fff', stroke: '#000', 'stroke-width': 1.6 }, front);
+
+  // -- copaci din curtea bisericii (în spatele zidului, se văd doar coroanele de deasupra) + ramuri care trec peste zid
+  crown(back, wallR * .2, top - 2, 26);
+  crown(back, wallR * .78, top - 4, 32);
+  const bx0 = wallR * .78;
+  dbl(front, `M${bx0 + 16} ${top - 28} Q${bx0 + 6} ${top - 10} ${bx0 - 6} ${top + 16}`, 3);
+  C(front, bx0 + 6, top - 14, 4, '#fff', 1.6); C(front, bx0 - 1, top + 2, 4.2, '#fff', 1.6); C(front, bx0 - 7, top + 17, 3.6, '#fff', 1.6);
+
+  // -- iederă care atârnă din vârful zidului
+  for (let x = 24; x < wallR - 14; x += wallR / 5 + rd(-6, 6)) {
+    const len = rd(rh * .7, rh * 1.9), n = Math.round(len / 11);
+    dbl(front, `M${x} ${top - 8} L${x} ${top + len}`, 2.2);
+    for (let i = 0; i <= n; i++) C(front, x + (i % 2 ? 4.5 : -4.5), top - 6 + i * len / n, rd(3.2, 4.4), '#fff', 1.6);
+    C(front, x, top + len + 3, 3.4, '#fff', 1.6);
+  }
+  // -- mușchi la baza zidului
+  for (let x = 30; x < wallR; x += rd(70, 120)) { moss(x, 8); moss(x + 9, 5); moss(x - 8, 4); }
+
+  // -- iarbă, flori, pietricele: în față (pe zid / pe drum) și în spate (se văd prin barele porții)
+  for (let x = 6; x < W; x += rd(24, 44)) {
+    tuft(front, x, gy, rd(.8, 1.2));
+    if (Math.random() < .3) flower(front, x + rd(8, 16), gy, rd(14, 24));
+    if (Math.random() < .25) pebble(front, x + rd(-10, 10), gy + rd(4, 11), rd(.6, 1));
+  }
+  for (let x = gl - 20; x < gr + 20; x += rd(22, 40)) {
+    tuft(back, x, gy - 22, rd(.7, 1));
+    if (Math.random() < .35) flower(back, x + rd(6, 14), gy - 22, rd(12, 20));
+    if (Math.random() < .3) pebble(back, x + rd(-8, 8), gy - 20, .8);
+  }
+
+  // -- trotuar + bordură + banda drumului (aceleași blocuri negre alternative și dale ca la nivelul cu mașina)
+  const SW = 16, CB = 7, sy1 = gy + SW, sy2 = sy1 + CB;
+  for (let x = -20; x < W + 20; x += 28) L(front, x, gy, x, sy1, 1.5);
+  L(front, -20, sy1, W + 20, sy1, 2.5);
+  for (let x = -20; x < W + 20; x += 36) R(front, x, sy1, 18, CB, '#000', 0);
+  L(front, -20, sy2, W + 20, sy2, 3);
+  const laneY = sy2 + Math.min(44, (H - sy2) * .5);
+  for (let x = -20; x < W + 20; x += 56) L(front, x, laneY, x + 28, laneY, 3);
+
+  // -- porumbei pe zid (în frontW, deci intră odată cu zidul)
+  const PIG = '<svg viewBox="-6 0 50 32"><path d="M4 16 L-4 12 L-3 21 Z" fill="#fff" stroke="#000" stroke-width="2" stroke-linejoin="round"/><ellipse cx="18" cy="18" rx="14" ry="9" fill="#fff" stroke="#000" stroke-width="2.5"/><circle cx="31" cy="11" r="6" fill="#fff" stroke="#000" stroke-width="2.5"/><path d="M36 10 L41 12 L36 13 Z" fill="#000"/><circle cx="32" cy="10" r="1.3" fill="#000"/><path class="gt-wing" d="M10 16 Q18 6 26 16 Q18 21 10 16 Z" fill="#fff" stroke="#000" stroke-width="2"/><path d="M15 27 V31 M21 27 V31" stroke="#000" stroke-width="2" stroke-linecap="round"/></svg>';
+  const capY = top - 10, clampX = v => Math.max(8, Math.min(wallR - 36, v));
+  const mkBird = (x, y = capY - 22) => { const b = document.createElement('div'); b.className = 'gt-bird'; b.style.left = x + 'px'; b.style.top = y + 'px'; b.innerHTML = PIG; frontW.appendChild(b); return b; };
+  const flockA = [
+    mkBird(clampX(mx - 34)),
+    mkBird(clampX(mx + 8)),
+    mkBird(clampX(jx + 40)),
+    mkBird(gl - pw / 2 - 17, top - 63)      // pe bila stâlpului din stânga al porții
+  ];
+
+  const scare = list => {
+    list.forEach((b, i) => {
+      b.classList.add('fly');
+      b.animate([
+        { transform: 'translate(0,0) rotate(0)', opacity: 1 },
+        { transform: `translate(${rd(40, 70)}px,${-rd(50, 90)}px) rotate(-18deg)`, opacity: 1, offset: .5 },
+        { transform: `translate(${rd(140, 220)}px,${-rd(150, 260)}px) rotate(-10deg) scale(.7)`, opacity: 0 }
+      ], { duration: 1100 + i * 150, delay: i * 90, easing: 'ease-in', fill: 'forwards' }).onfinish = () => b.remove();
+    });
+    SFX.whoosh(.5, true); vib(15);
+  };
 
   // ---- omuletul (alb, corp rotunjit) ----
   const man = document.createElement('div'); man.className = 'gt-man';
@@ -768,6 +1015,7 @@ async function gateLevel(sc, hint) {
         const n = t - 1; pose(n % 2 ? 'climbA' : 'climbB'); SFX.stair(n);
         man.style.transition = 'top .18s cubic-bezier(.3,1.5,.5,1), left .18s'; place(mx, bottomAt(n));
         setHint('Atinge ecranul', n < N ? `Urcă · ${n} / ${N}` : 'Sari peste gard!');
+        if (n === 9) scare(flockA);
         await wait(180);
       } else {                                           // saritura
         tap.removeEventListener('pointerdown', onTap); tap.remove(); hint.innerHTML = ''; res(); return;
@@ -867,12 +1115,11 @@ async function gateLevel(sc, hint) {
   await say(hint, 'Tu', '— Ahh,Coletuu|!!🥲😫', 280);
   await wait(2000);
 
-  // ---- iesire: totul se stinge si se sterge, apoi urmeaza cladirea ----
-  [backW, frontW, man, parcel].forEach(e => { e.style.transition = 'opacity .6s'; e.style.opacity = 0; });
-  hint.style.transition = 'opacity .5s'; hint.style.opacity = 0;
-  await wait(700);
+  // ---- iesire ----
+  await fade.to('#fff');
   [backW, frontW, man, parcel].forEach(e => e.remove());
-  hint.innerHTML = ''; hint.style.opacity = ''; hint.style.transition = '';
+  hint.innerHTML = '';
+  await fade.from();
 }
 // ===== EVENIMENTUL: interfonul (parola 221409) =====
 async function intercom(sc, hint) {
@@ -883,6 +1130,7 @@ async function intercom(sc, hint) {
     + '<div class="ic-scr">' + '<i></i>'.repeat(CODE.length) + '</div>'
     + '<div class="ic-grid">' + keys.map(k => `<button data-k="${k}">${k}</button>`).join('') + '</div>';
   sc.appendChild(pad);
+  HEARTS.place(2, { in: pad, light: true, x: pad.offsetWidth - 34, y: 9 });   // inimioara 2: pe panoul interfonului
   const scr = pad.querySelector('.ic-scr'), led = pad.querySelector('.ic-led');
   const draw = v => scr.innerHTML = Array.from({ length: CODE.length }, (_, i) => `<i class="${i < v.length ? 'f' : ''}"></i>`).join('');
 
@@ -1257,34 +1505,62 @@ if (S <= 2) {
 if (S <= 3) {
     await wait(300);
     await bobAsk('— Oo nuuu! Am pană la mașină și nu pot sa-l livrez eu. Ma poți ajuta și cu asta te rog, pentru că este foarte important. Este chiar ziua ei de naștere și va fi pacăt sa nu ajungă la timp. Poți să mergi cu mașina ta?', 90);
-    ground.style.opacity = 0; P.style.opacity = 0; await wait(500);
-    await drive(sc, hint);
+await fade.to('#fff');
+ground.style.opacity = 0; P.style.opacity = 0;
+await fade.from();
+await drive(sc, hint);
 }
 // poarta bisericii
 if (S <= 4) {
     ground.style.opacity = 0; P.style.opacity = 0;
-    await gateLevel(sc, hint);
+    await gateLevel(sc, hint); HEARTS.clear();
     ground.style.opacity = 1; P.style.opacity = 1; await wait(700);
 }
+
     // cladirea: foarte inalta, fara numere la etaje (iese pe sus din ecran)
 if (S <= 4) {
     const F = 5, FH = 30, LH = 42;                 // parter + 4 etaje, inaltime etaj, inaltime parter
     const bh = (F - 1) * FH + LH, vh = bh + 10;   // inaltimea cladirii / a viewBox-ului
+const ly = 5 + (F - 1) * FH;   // linia de sus a parterului
     const bw = Math.min(W * .6, H * .34), bs = bw / 100;
     const bl = Math.min(W * .7 - bw / 2, W - 10 - bw), bt = gy - (5 + bh) * bs;
     const bsvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     bsvg.setAttribute('viewBox', `0 0 100 ${vh}`);
     bsvg.style.cssText = `position:absolute;left:${bl}px;top:${bt}px;width:${bw}px;height:${bw * vh / 100}px;opacity:0;transition:opacity .6s;overflow:visible`;
-    let bx = `<rect x="5" y="5" width="90" height="${bh}" fill="#fff" stroke="#000" stroke-width="3"/>`;
-    for (let i = 0; i < F - 1; i++) {
-      const y = 5 + i * FH;
-      if (i) bx += `<line x1="5" y1="${y}" x2="95" y2="${y}" stroke="#000" stroke-width="2"/>`;
-      for (const x of [12, 40, 68]) bx += `<rect x="${x}" y="${y + 9}" width="20" height="14" fill="#fff" stroke="#000" stroke-width="2"/>`;
+    // ---- stiluri pentru animatiile din bloc (o singura data) ----
+    if (!document.getElementById('bkStyle')) {
+      const s = document.createElement('style'); s.id = 'bkStyle';
+      s.textContent = '.bk-c{transform-box:fill-box;transform-origin:50% 0;animation:bkSw 3.2s ease-in-out infinite}.bk-c.r{animation-delay:-1.6s}@keyframes bkSw{0%,100%{transform:skewX(0)}50%{transform:skewX(-7deg)}}.bk-e{transform-box:fill-box;transform-origin:50% 50%;animation:bkB 4s infinite}@keyframes bkB{0%,92%,100%{transform:scaleY(1)}96%{transform:scaleY(.1)}}';
+      document.head.appendChild(s);
     }
-    const ly = 5 + (F - 1) * FH;                  // parterul
-    bx += `<line x1="5" y1="${ly}" x2="95" y2="${ly}" stroke="#000" stroke-width="2"/>`;
-    for (const x of [10, 70]) bx += `<rect x="${x}" y="${ly + 12}" width="20" height="16" fill="#fff" stroke="#000" stroke-width="2"/>`;
-    bsvg.innerHTML = bx;
+const R_ = (x, y, w, h, f = '#fff', sw = 2) => `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${f}" stroke="#000" stroke-width="${sw}"/>`;
+const L_ = (x1, y1, x2, y2, w = 1.5) => `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#000" stroke-width="${w}" stroke-linecap="round"/>`;
+const C_ = (cx, cy, r, f = '#fff', sw = 1.5) => `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${f}" stroke="#000" stroke-width="${sw}"/>`;
+
+// ---- blocul ----
+let bx = R_(5, 5, 90, bh, '#fff', 3);
+
+for (let i = 0; i < F - 1; i++) {
+  const y = 5 + i * FH;
+  if (i) bx += L_(5, y, 95, y, 2);
+  [12, 40, 68].forEach((x, j) => {
+    const wy = y + 9;
+    const balc = (j === 1 && (i === 1 || i === 3));            // balcoane
+    bx += R_(x, wy, 20, 14);
+    bx += L_(x + 10, wy, x + 10, wy + 14, 1.2) + L_(x, wy + 7, x + 20, wy + 7, 1.2);
+    if (balc) bx += R_(x - 3, wy + 14, 26, 4, '#fff', 1.5);    // parapet balcon
+  });
+}
+
+// ---- parterul ----
+bx += L_(5, ly, 95, ly, 2);
+bx += R_(64.5, ly + 16, 5, 10, '#fff', 1.5);                   // panou interfon
+for (let r = 0; r < 3; r++)
+  for (let c = 0; c < 2; c++)
+    bx += C_(66.2 + c * 2.6, ly + 19 + r * 3, .7, '#000', 0);  // butoane interfon
+bx += R_(-9, ly + 33, 6, 9, '#fff', 1.5) + R_(-10, ly + 31, 8, 2.5, '#000', 1); // coș de gunoi
+
+bsvg.innerHTML = bx;
     const bd = document.createElement('div'); bd.className = 'bd';
     bd.innerHTML = '<div class="bh"></div><div class="bl l"></div><div class="bl r"></div>';
     bd.style.cssText = `left:${bl + 37 * bs}px;top:${bt + (ly + 4) * bs}px;width:${26 * bs}px;height:${(LH - 4) * bs}px`;
@@ -1380,6 +1656,7 @@ if (S <= 4) {
       for (let n = 1; n <= 10; n++) { const cx = X(x0 + (n - .5) * dx); rl += `<line x1="${cx}" y1="${yb - n * dy}" x2="${cx}" y2="${yb - n * dy - 1.6 * dy}" stroke="#000" stroke-width="1.5"/>`; }
       return [s, rl];
     };
+    HEARTS.place(3, { in: sc, light: true, x: innerWidth - 30, y: innerHeight * .42 });   // inimioara 3: pe scări
     const FLIGHTS = 2;
     for (let fl = 1; fl <= FLIGHTS && S <= 5; fl++) {
       const dir = fl % 2 ? 1 : -1, X = x => dir > 0 ? x : W - x;
@@ -1409,6 +1686,7 @@ if (S <= 4) {
         fsvg.style.opacity = 0; P.style.opacity = 0; await wait(500);
       }
     }
+    HEARTS.clear();
     // scarile s-au terminat -> nu apare usa direct, ci intri pe un hol si mergi pana la ea
     await wait(300); ss.parentElement.style.transition = 'opacity .4s'; ss.parentElement.style.opacity = 0;
     const cv = document.createElement('canvas');
@@ -1529,7 +1807,7 @@ if (S <= 4) {
 // cadoul vine spre ecran; trebuie lovit de 4 ori, fiecare lovitura mai brutala
 async function present() {
   const G = document.createElement('div'); G.id = 'present';
-  G.innerHTML = '<svg viewBox="0 0 100 80" width="170" height="136"><rect class="b" x="6" y="24" width="88" height="50" rx="3"/><rect class="w" x="14" y="44" width="22" height="16" rx="1"/><rect class="w" x="44" y="24" width="12" height="50"/><g id="plid"><rect class="b" x="2" y="12" width="96" height="16" rx="3"/><rect class="w" x="44" y="12" width="12" height="16"/></g></svg><span class="sp" style="--dx:-30px">✨</span><span class="sp" style="--dx:5px">✨</span><span class="sp" style="--dx:35px">✨</span>';
+  G.innerHTML = '<svg viewBox="0 0 100 80" width="170" height="136"><rect class="b" x="6" y="24" width="88" height="50" rx="3"/><rect class="w" x="14" y="44" width="22" height="16" rx="1"/><rect class="w" x="44" y="24" width="12" height="50"/><g id="plid"><rect class="b" x="2" y="12" width="96" height="16" rx="3"/><rect class="w" x="44" y="12" width="12" height="16"/></g></svg>';
   document.body.append(G);
   G.getBoundingClientRect(); G.classList.add('in');
   SFX.whoosh(1.1, true); setTimeout(() => SFX.pop(), 1200); await wait(1900);
@@ -1663,7 +1941,65 @@ async function present() {
   G.classList.remove('charge');
   lid.style.transition = ''; lid.style.transform = '';
   flash(.7); shake(14, 600); burst(60, 2.2); SFX.crash(); SFX.sparkle();
-  G.classList.add('open'); SFX.boom(); stain(G);
+  G.classList.add('open'); SFX.boom(); pops(G); stain(G);
+}
+// cercuri de curcubeu care izbucnesc în sus din gura cutiei
+function pops(G) {
+  const W = innerWidth, H = innerHeight, dpr = Math.min(devicePixelRatio || 1, 2);
+  const cv = document.createElement('canvas');
+  cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+  cv.style.cssText = 'position:fixed;inset:0;width:100%;height:100%;z-index:6;pointer-events:none';
+  document.body.appendChild(cv);
+  const c = cv.getContext('2d');
+
+  const r = G.getBoundingClientRect();
+  const L = r.left + r.width * .22, BW = r.width * .56;
+  const oy = r.top + r.height * .42;
+  const COLS = ['#ff1744', '#ff7a00', '#ffd000', '#2bd96b', '#1e90ff', '#5b3df5', '#b33dff'];
+  const rnd = (a, b) => a + Math.random() * (b - a);
+
+  let parts = [];
+  const spawn = n => {
+    for (let i = 0; i < n; i++) {
+      const fx = Math.random(), band = Math.min(6, Math.floor(fx * 7));
+      parts.push({
+        x: L + fx * BW, y: oy,
+        vx: rnd(-90, 90) + (fx - .5) * 160,
+        vy: -rnd(350, 950),
+        g: rnd(500, 800),
+        rad: rnd(3, 11),
+        col: Math.random() < .75 ? COLS[band] : COLS[(Math.random() * 7) | 0],
+        ring: Math.random() < .3,
+        age: 0, life: rnd(1.1, 1.9)
+      });
+    }
+  };
+
+  spawn(110);
+  const born = performance.now(); let last = born, extra = 0;
+  const tick = now => {
+    const dt = Math.min(.05, (now - last) / 1000); last = now;
+    const age = (now - born) / 1000;
+    if (age < .9) { extra += dt * 90; const n = Math.floor(extra); extra -= n; spawn(n); }
+
+    c.setTransform(dpr, 0, 0, dpr, 0, 0);
+    c.clearRect(0, 0, W, H);
+    parts = parts.filter(p => p.age < p.life);
+    for (const p of parts) {
+      p.age += dt;
+      p.vy += p.g * dt; p.vx *= 1 - .8 * dt;
+      p.x += p.vx * dt; p.y += p.vy * dt;
+      const k = p.age / p.life;
+      c.globalAlpha = Math.min(1, (1 - k) * 1.6);
+      const rad = p.rad * (1 - k * .35);
+      c.beginPath(); c.arc(p.x, p.y, rad, 0, 7);
+      if (p.ring) { c.strokeStyle = p.col; c.lineWidth = 2; c.stroke(); }
+      else { c.fillStyle = p.col; c.fill(); }
+    }
+    c.globalAlpha = 1;
+    if (parts.length || age < .9) requestAnimationFrame(tick); else cv.remove();
+  };
+  requestAnimationFrame(tick);
 }
 // 7 benzi verticale peste capacul cutiei (pornesc din gura corpului); dupa 2s rosul coboara foarte rapid peste tot
 function stain(G) {
@@ -1675,7 +2011,7 @@ function stain(G) {
     document.body.appendChild(cv);
     return cv.getContext('2d');
   };
-  const cb = mk(6);   // benzi: peste cutie si capac (cutia are z-index 7)
+  const cb = mk(5);   // benzi: peste cutie si capac (cutia are z-index 7)
   const cr = mk(8);   // rosu: creat al doilea, deci e peste benzi (si peste cutie)
 
   const r0 = G.getBoundingClientRect();
@@ -1991,15 +2327,15 @@ list.appendChild(end);
     SFX.click(); SFX.hush(); SFX.erupt();
     fwLid.style.transform = 'translate(-60px,-45px) rotate(-100deg)';
     fwTxt.style.opacity = 0;
-    setTimeout(() => artificii(() => {
-      // spectacolul s-a închis: cutia revine și o poți apăsa din nou
-      SFX.cute();
-      fwLid.style.transform = '';
-      fwTxt.style.opacity = .8;
-      fwBox.style.animation = 'wiggle 2.4s ease-in-out infinite';
-      fwBox.style.cursor = 'pointer';
-      delete fwBox.dataset.done;
-    }), 900);
+setTimeout(() => artificii(() => {
+  SFX.cute();
+  fwLid.style.transform = '';
+  fwTxt.style.opacity = .8;
+  fwBox.style.animation = 'wiggle 2.4s ease-in-out infinite';
+  fwBox.style.cursor = 'pointer';
+  delete fwBox.dataset.done;
+  showHeartBtn();                      // <- nou
+}), 900);
   });
   document.body.appendChild(box);
   box.getBoundingClientRect(); box.style.opacity = 1;
@@ -2039,7 +2375,6 @@ function makeCard(item, W, dpr) {
       "position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;padding:20px;font:700 20px/1.4 -apple-system,'SF Pro Display',system-ui,sans-serif;color:#000";
     card.appendChild(tx);
   }
-
   // stratul care se razuieste
   const cv = document.createElement('canvas');
   cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
@@ -2086,6 +2421,15 @@ function makeCard(item, W, dpr) {
   const up = () => { if (!down) return; down = false; check(); };
   cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
   return card;
+}
+function showHeartBtn() {
+  if (document.getElementById('hbBtn')) return;
+  const b = document.createElement('button');
+  b.id = 'hbBtn'; b.textContent = '❤';
+  b.style.cssText = 'position:fixed;top:calc(env(safe-area-inset-top,0px) + 10px);right:10px;z-index:100001;width:30px;height:30px;border-radius:50%;border:2px solid #fff;background:rgb(0 0 0 / 20%);color:#fff;font:700 15px/1 system-ui,sans-serif;padding:0;cursor:pointer;opacity:0;transition:opacity .8s;-webkit-tap-highlight-color:transparent';
+  b.onclick = () => { SFX.click(); HEARTS.toast(); };
+  document.body.appendChild(b);
+  b.getBoundingClientRect(); b.style.opacity = .85;
 }
 // ===== TEMPORAR: buton de nivele (șterge tot blocul când nu mai ai nevoie) =====
 (() => {
